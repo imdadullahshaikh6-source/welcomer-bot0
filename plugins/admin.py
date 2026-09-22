@@ -5,7 +5,6 @@ from pyrogram.types import (
     Message,
     CallbackQuery,
     ChatPermissions,
-    ChatPrivileges,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
@@ -458,8 +457,8 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
         await query.answer(f"Error: {e}", show_alert=True)
 
 
-@Client.on_message(filters.command(["promote"], prefixes=[".", "/"]) & filters.group)
-async def promote_command(client: Client, message: Message):
+@Client.on_message(filters.command(["pin"], prefixes=[".", "/"]) & filters.group)
+async def pin_command(client: Client, message: Message):
     if not message.from_user:
         return
 
@@ -467,35 +466,35 @@ async def promote_command(client: Client, message: Message):
     if not is_adm:
         return
 
-    if privs != "owner" and not (privs and privs.can_promote_members):
+    if privs != "owner" and not (privs and privs.can_pin_messages):
         return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b>\nAapke paas new admins promote karne ka right nahi hai.</blockquote>",
+            "<blockquote>❌ <b>Permission Denied!</b>\nAapke paas messages pin karne ka right nahi hai.</blockquote>",
             parse_mode=ParseMode.HTML,
         )
 
-    target = await extract_target_user(client, message)
-    if not target:
+    if not message.reply_to_message:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>User par reply karke promote karein:</b> <code>.promote &lt;title&gt;</code></blockquote>",
+            "<blockquote>⚠️ <b>Message par reply karke <code>.pin</code> karein.</b></blockquote>",
             parse_mode=ParseMode.HTML,
         )
 
-    parts = message.text.split(maxsplit=2)
-    custom_title = "Admin"
-    if message.reply_to_message and len(parts) > 1:
-        custom_title = parts[1]
-    elif len(parts) > 2:
-        custom_title = parts[2]
-
+    is_loud = "loud" in message.text.lower()
     try:
-        p_dict = {
-            "can_manage_chat": True,
-            "can_delete_messages": True,
-            "can_manage_video_chats": True,
-            "can_restrict_members": True,
-            "can_promote_members": False,
-            "can_change_info": True,
-            "can_invite_users": True,
-            "can_pin_messages": True,
-        }
-        await client.promote_chat_member(message.chat.id, target.id, Chat
+        await client.pin_chat_message(
+            chat_id=message.chat.id,
+            message_id=message.reply_to_message.id,
+            disable_notification=not is_loud,
+        )
+        await message.reply_text(
+            f"<blockquote>📌 <b>Pinned!</b>\nNotify: <code>{'ON 🔔' if is_loud else 'OFF 🔕'}</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        await message.reply_text(
+            f"<blockquote>⚠️ <b>Pin failed:</b> <code>{html.escape(str(e))}</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+
+
+@Client.on_message(filters.command(["unpin"], prefixes=[".", "/"]) & filters.group)
+async def
