@@ -1,9 +1,10 @@
 import os
 import sys
-from pyrogram import Client
+import asyncio
+from pyrogram import Client, idle
 
 API_ID = int(os.environ.get("API_ID", 0))
-API_HASH = os.environ.get("API_HASH", "")
+API_HASH = os.environ.get("API_HASH", "").strip().strip('"').strip("'")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
 if not BOT_TOKEN or not API_ID or not API_HASH:
@@ -11,7 +12,7 @@ if not BOT_TOKEN or not API_ID or not API_HASH:
     sys.exit(1)
 
 app = Client(
-    name="itachi_bot",
+    name="itachi_manager_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
@@ -19,7 +20,16 @@ app = Client(
     plugins=dict(root="plugins")
 )
 
+async def main():
+    print("Starting Bot...")
+    await app.start()
+    bot_info = await app.get_me()
+    print(f"Bot connected successfully as @{bot_info.username} (ID: {bot_info.id})")
+    await idle()
+    await app.stop()
+    print("Bot stopped.")
+
 if __name__ == "__main__":
-    print("Bot starting up...")
-    app.run()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
     
