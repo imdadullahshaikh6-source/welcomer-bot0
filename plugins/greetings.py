@@ -1,7 +1,7 @@
 import re
 from pyrogram import Client, filters
-from pyrogram.enums import ParseMode
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ParseMode, ChatMemberStatus
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, ChatMemberUpdated
 
 welcome_data = {}
 
@@ -25,7 +25,6 @@ def parse_buttons_and_clean_text(raw_text: str):
         return "", None
 
     pattern = r"\[([^\[\]]+)\]\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\[([^\[\]]+?)\|(?:\s*)(https?://[^\s]+)\]"
-    
     buttons = []
     lines = raw_text.split("\n")
     cleaned_lines = []
@@ -75,6 +74,31 @@ def apply_template_tags(template: str, user, chat_title: str) -> str:
     for key, val in replacements.items():
         res = re.sub(re.escape(key), val, res, flags=re.IGNORECASE)
     return res
+
+async def send_custom_welcome(client: Client, chat_id: int, user, chat_title: str):
+    settings = welcome_data.get(chat_id, {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None})
+
+    if not settings.get("enabled", True):
+        return
+
+    raw_template = settings.get("text", DEFAULT_WELCOME)
+    keyboard = settings.get("keyboard")
+    m_type = settings.get("type", "text")
+    f_id = settings.get("file_id")
+
+    formatted_text = apply_template_tags(raw_template, user, chat_title)
+
+    try:
+        if m_type == "photo" and f_id:
+            await client.send_photo(chat_id=chat_id, photo=f_id, caption=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        elif m_type == "video" and f_id:
+            await client.send_video(chat_id=chat_id, video=f_id, caption=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        elif m_type == "animation" and f_id:
+            await client.send_animation(chat_id=chat_id, animation=f_id, caption=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
+        else:
+            await client.send_message(chat_id=chat_id, text=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    except Exception:
+        pass
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -137,8 +161,7 @@ async def set_welcome_msg(client: Client, message: Message):
         "<blockquote>🎉 <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙢𝙚𝙨𝙨𝙖𝙜𝙚 𝙨𝙚𝙩</b> 🎉\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
-        "✨ <b>Tags:</b> <code>{first}</code>, <code>{username}</code>, <code>{id}</code> ready!\n"
-        "⚡ <b>Status:</b> Mentions & custom tags perfectly linked!</blockquote>"
+        "⚡ <b>Status:</b> Cleanservice support & tags active!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
 
@@ -206,37 +229,31 @@ async def reset_welcome_cmd(client: Client, message: Message):
     welcome_data[message.chat.id] = {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
     await message.reply_text("<blockquote>🔄 <b>Welcome message reset to default!</b></blockquote>", parse_mode=ParseMode.HTML)
 
-# ==================== Member Join Event ====================
+# ==================== Member Join Handlers (Detects Cleanservice & Joins) ====================
+
+# 1. ChatMemberUpdated: Triggers even if cleanservice deletes service messages or user joins via link / request
+@Client.on_chat_member_updated()
+async def member_status_update(client: Client, update: ChatMemberUpdated):
+    # Member join hua ya approve hua
+    old_status = update.old_chat_member.status if update.old_chat_member else None
+    new_status = update.new_chat_member.status if update.new_chat_member else None
+
+    # Check if user transitioned from left/kicked/restricted to member
+    if old_status in [None, ChatMemberStatus.LEFT, ChatMemberStatus.BANNED] and new_status == ChatMemberStatus.MEMBER:
+        bot = await client.get_me()
+        user = update.new_chat_member.user
+        if user.id == bot.id:
+            return
+        chat_title = update.chat.title or "Group"
+        await send_custom_welcome(client, update.chat.id, user, chat_title)
+
+# 2. Normal service message fallback
 @Client.on_message(filters.new_chat_members & filters.group)
-async def welcome_new_member(client: Client, message: Message):
-    chat_id = message.chat.id
-    settings = welcome_data.get(chat_id, {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None})
-
-    if not settings.get("enabled", True):
-        return
-
+async def welcome_new_member_msg(client: Client, message: Message):
     bot = await client.get_me()
     for user in message.new_chat_members:
         if user.id == bot.id:
             continue
-
-        raw_template = settings.get("text", DEFAULT_WELCOME)
-        keyboard = settings.get("keyboard")
-        m_type = settings.get("type", "text")
-        f_id = settings.get("file_id")
-
         chat_title = message.chat.title or "Group"
-        formatted_text = apply_template_tags(raw_template, user, chat_title)
-
-        try:
-            if m_type == "photo" and f_id:
-                await message.reply_photo(photo=f_id, caption=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-            elif m_type == "video" and f_id:
-                await message.reply_video(video=f_id, caption=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-            elif m_type == "animation" and f_id:
-                await message.reply_animation(animation=f_id, caption=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
-            else:
-                await message.reply_text(text=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-        except Exception:
-            pass
-            
+        await send_custom_welcome(client, message.chat.id, user, chat_title)
+        
