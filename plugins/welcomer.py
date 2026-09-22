@@ -35,7 +35,12 @@ async def process_requests(client, chat_id):
                 await client.send_chat_action(chat.id, ChatAction.TYPING)
                 await asyncio.sleep(3)
                 name = re.sub(r'[*_`\[\]()]', '', req.user.first_name or "User")
-                await client.send_message(chat.id, f"Welcome 🤗🤗 [{name}](tg://user?id={req.user.id})")
+                welcome_msg = (
+                    f"> 🌟 **Welcome to the Family!**\n"
+                    f"> 👋 Hello [{name}](tg://user?id={req.user.id})! 🤗🤗\n"
+                    f"> ✨ Aapka join request accept kar liya gaya hai. Have fun!"
+                )
+                await client.send_message(chat.id, welcome_msg)
                 await asyncio.sleep(6)
             except errors.FloodWait as e:
                 await asyncio.sleep(e.value)
@@ -54,11 +59,11 @@ async def start_stop_toggle(client, message):
     cmd = message.command[0].lower()
     if cmd == "start":
         IS_ACTIVE = True
-        await message.reply_text("🟢 **Welcomer Bot START ho gaya! Requests process ho rahi hain...**")
+        await message.reply_text("> 🟢 **Welcomer Bot START ho gaya! Requests process ho rahi hain...**")
         asyncio.create_task(process_requests(client, message.chat.id))
     elif cmd == "stop":
         IS_ACTIVE = False
-        await message.reply_text("🛑 **Welcomer Bot STOP ho gaya!**")
+        await message.reply_text("> 🛑 **Welcomer Bot STOP ho gaya!**")
 
 @Client.on_chat_join_request()
 async def auto_accept_live(client, request):
@@ -70,7 +75,12 @@ async def auto_accept_live(client, request):
         await client.send_chat_action(request.chat.id, ChatAction.TYPING)
         await asyncio.sleep(3)
         name = re.sub(r'[*_`\[\]()]', '', request.from_user.first_name or "User")
-        await client.send_message(request.chat.id, f"Welcome 🤗🤗 [{name}](tg://user?id={request.from_user.id})")
+        welcome_msg = (
+            f"> 🌟 **Welcome to the Family!**\n"
+            f"> 👋 Hello [{name}](tg://user?id={request.from_user.id})! 🤗🤗\n"
+            f"> ✨ Aapka join request accept ho gaya hai. Enjoy your stay!"
+        )
+        await client.send_message(request.chat.id, welcome_msg)
     except Exception as e:
         print(f"Live request error: {e}")
         
