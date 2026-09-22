@@ -107,9 +107,7 @@ async def ban_command(client: Client, message: Message):
     try:
         await client.ban_chat_member(message.chat.id, target.id)
         mention = get_user_mention(target)
-        btn = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("✨ Unban Member", callback_data=f"adm_unban_{target.id}")]]
-        )
+        btn = InlineKeyboardMarkup([[InlineKeyboardButton("✨ Unban Member", callback_data=f"adm_unban_{target.id}")]])
         await message.reply_text(
             f"<blockquote>🚫 <b>Banned!</b>\n👤 <b>User:</b> {mention}\n⚡ <b>Action:</b> Successfully removed from group.</blockquote>",
             reply_markup=btn,
@@ -201,9 +199,7 @@ async def mute_command(client: Client, message: Message):
             permissions=ChatPermissions(can_send_messages=False),
         )
         mention = get_user_mention(target)
-        btn = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🔊 Unmute Member", callback_data=f"adm_unmute_{target.id}")]]
-        )
+        btn = InlineKeyboardMarkup([[InlineKeyboardButton("🔊 Unmute Member", callback_data=f"adm_unmute_{target.id}")]])
         await message.reply_text(
             f"<blockquote>🤐 <b>Muted!</b>\n👤 <b>User:</b> {mention}\n🔇 <b>Status:</b> Ab yeh message nahi bhej sakte.</blockquote>",
             reply_markup=btn,
@@ -369,9 +365,7 @@ async def warn_command(client: Client, message: Message):
         warn_data[chat_id][target.id] = 0
         try:
             await client.ban_chat_member(chat_id, target.id)
-            btn = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("✨ Unban Member", callback_data=f"adm_unban_{target.id}")]]
-            )
+            btn = InlineKeyboardMarkup([[InlineKeyboardButton("✨ Unban Member", callback_data=f"adm_unban_{target.id}")]])
             return await message.reply_text(
                 f"<blockquote>🚫 <b>3/3 Warnings Reached!</b>\n👤 <b>User:</b> {mention}\n📝 <b>Reason:</b> <i>{html.escape(reason)}</i>\n⚡ <b>Action:</b> User has been banned!</blockquote>",
                 reply_markup=btn,
@@ -380,9 +374,7 @@ async def warn_command(client: Client, message: Message):
         except Exception as e:
             return await message.reply_text(f"<blockquote>⚠️ Ban failed: <code>{e}</code></blockquote>")
 
-    btn = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("🎀 Remove Warn (Admin Only)", callback_data=f"adm_rmwarn_{target.id}")]]
-    )
+    btn = InlineKeyboardMarkup([[InlineKeyboardButton("🎀 Remove Warn (Admin Only)", callback_data=f"adm_rmwarn_{target.id}")]])
 
     await message.reply_text(
         f"<blockquote>⚠️ <b>Warning Issued!</b>\n✦ ━━━━━━━━━━━━━━━━━━ ✦\n👤 <b>User:</b> {mention}\n📊 <b>Warnings:</b> <code>{current_warns}/3</code>; be careful!\n📝 <b>Reason:</b> <i>{html.escape(reason)}</i></blockquote>",
@@ -401,17 +393,11 @@ async def reset_warn_cmd(client: Client, message: Message):
         return
 
     if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b></blockquote>", parse_mode=ParseMode.HTML)
 
     target = await extract_target_user(client, message)
     if not target:
-        return await message.reply_text(
-            "<blockquote>⚠️ User par reply karein: <code>.resetwarns</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>⚠️ User par reply karein: <code>.resetwarns</code></blockquote>", parse_mode=ParseMode.HTML)
 
     chat_id = message.chat.id
     if chat_id in warn_data and target.id in warn_data[chat_id]:
@@ -450,9 +436,7 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
             )
         elif action == "unmute":
             chat = await client.get_chat(chat_id)
-            default_perms = chat.permissions or ChatPermissions(
-                can_send_messages=True, can_send_media_messages=True
-            )
+            default_perms = chat.permissions or ChatPermissions(can_send_messages=True, can_send_media_messages=True)
             await client.restrict_chat_member(chat_id, user_id, default_perms)
             await query.answer("🔊 User unmuted!")
             await query.message.edit_text(
@@ -504,10 +488,14 @@ async def promote_command(client: Client, message: Message):
         custom_title = parts[2]
 
     try:
-        p_rights = ChatPrivileges(
-            can_manage_chat=True,
-            can_delete_messages=True,
-            can_manage_video_chats=True,
-            can_restrict_members=True,
-            can_promote_members=False,
-       
+        p_dict = {
+            "can_manage_chat": True,
+            "can_delete_messages": True,
+            "can_manage_video_chats": True,
+            "can_restrict_members": True,
+            "can_promote_members": False,
+            "can_change_info": True,
+            "can_invite_users": True,
+            "can_pin_messages": True,
+        }
+        await client.promote_chat_member(message.chat.id, target.id, Chat
