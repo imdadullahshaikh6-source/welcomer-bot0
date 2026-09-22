@@ -37,7 +37,7 @@ DM_START_TEXT = (
     "Main aapke group ki <b>Smart & Aesthetic Manager</b> hoon!\n\n"
     "✨ <i>Custom aesthetic welcomes</i>\n"
     "🛡️ <i>Group protection & silent moderation</i>\n"
-    "💬 <i>Auto approvals & anti-spam vibes</i>\n\n"
+    "💬 <i>AFK system & anti-spam vibes</i>\n\n"
     f"👑 <b>Owner:</b> @{OWNER_USERNAME}\n\n"
     "Niche diye buttons se explore karein:</blockquote>"
 )
@@ -82,6 +82,7 @@ FORMATTING_GUIDE_TEXT = (
     "• Tag karke: <code>.ban @username</code> ya <code>.ban Noor</code></blockquote>"
 )
 
+# First Page Layout (Clean green look)
 def get_start_markup(bot_username: str):
     owner_url = f"https://t.me/{OWNER_USERNAME}"
     add_bot_url = f"https://t.me/{bot_username}?startgroup=true"
@@ -113,7 +114,7 @@ def get_group_markup(bot_username: str):
         ]
     }
 
-# Commands Menu: Combined AFK & Quotes into single "Extra" button
+# Commands Menu: Request Accept completely removed, clean 2x2 grid + formatting
 def get_commands_menu():
     return {
         "inline_keyboard": [
@@ -123,10 +124,9 @@ def get_commands_menu():
             ],
             [
                 {"text": "🎉 Greetings", "callback_data": "cmd_greet", "style": "success"},
-                {"text": "📩 Request Accept", "callback_data": "cmd_req", "style": "success"}
+                {"text": "✨ Extra", "callback_data": "cmd_extra", "style": "success"}
             ],
             [
-                {"text": "✨ Extra", "callback_data": "cmd_extra", "style": "success"},
                 {"text": "📖 Formatting Guide", "callback_data": "open_formatting", "style": "success"}
             ],
             [
@@ -225,7 +225,7 @@ async def back_start_callback(client: Client, query: CallbackQuery):
     await call_tg_bot_api("editMessageText", payload)
     await query.answer()
 
-@Client.on_callback_query(filters.regex(r"^cmd_(admin|pin|greet|req|extra)$"))
+@Client.on_callback_query(filters.regex(r"^cmd_(admin|pin|greet|extra)$"))
 async def sub_commands_view(client: Client, query: CallbackQuery):
     mod = query.data.split("_")[1]
     
@@ -255,11 +255,6 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
             "• <code>.welcome on/off</code> - Greetings toggle karein\n"
             "• <code>.getwelcome</code> - Current welcome preview karein\n"
             "• <code>.resetwelcome</code> - Default text par reset karein"
-        ),
-        "req": (
-            "📩 <b>Join Requests:</b>\n"
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "• Group join requests aate hi bot instant approve karega aur member ko greeting message send karega."
         ),
         "extra": (
             "✨ <b>Extra Features:</b>\n"
