@@ -10,7 +10,7 @@ API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 STRING_SESSION = os.environ.get("STRING_SESSION")
 
-# Aapki Itachi wali main user ID
+# Aapki Itachi wali numeric Telegram ID
 ITACHI_ID = 8373739674
 
 app = Client(
@@ -36,11 +36,12 @@ def get_readable_time(seconds: int) -> str:
         return f"{m}m {s}s"
     return f"{s}s"
 
-# Strict check: Sirf Itachi ya Noor ID
-def is_owner(message):
-    if message.outgoing:  # Noor ID khud
+def is_admin_or_owner(message):
+    # Noor khud bhej rahi ho (outgoing)
+    if message.outgoing:
         return True
-    if message.from_user and message.from_user.id == ITACHI_ID:  # Itachi ID
+    # Itachi ID se message aaya ho (incoming)
+    if message.from_user and message.from_user.id == ITACHI_ID:
         return True
     return False
 
@@ -66,28 +67,28 @@ async def process_requests(client, chat_id):
             except errors.FloodWait as e:
                 await asyncio.sleep(e.value)
             except Exception as e:
-                print(f"Join approval error: {e}")
+                print(f"Approval error: {e}")
     except Exception as e:
         print(f"Fetch error: {e}")
     finally:
         TASK_RUNNING = False
 
-@app.on_message(filters.command(["start", "stop"], prefixes=[".", "/"]))
-async def start_stop(client, message):
-    if not is_owner(message):
+@app.on_message(filters.regex(r"^[./](?i)(start|stop)") & filters.group)
+async def start_stop_handler(client, message):
+    if not is_admin_or_owner(message):
         return
     global IS_ACTIVE
-    cmd = message.command[0].lower()
-    if cmd == "start":
+    text = message.text.lower()
+    if "start" in text:
         IS_ACTIVE = True
         await message.reply_text("🟢 **Welcomer Bot START ho gaya!**")
         asyncio.create_task(process_requests(client, message.chat.id))
-    elif cmd == "stop":
+    elif "stop" in text:
         IS_ACTIVE = False
         await message.reply_text("🛑 **Welcomer Bot STOP ho gaya!**")
 
 @app.on_chat_join_request()
-async def live_join(client, request):
+async def live_join_handler(client, request):
     global IS_ACTIVE
     if not IS_ACTIVE:
         return
@@ -100,34 +101,33 @@ async def live_join(client, request):
     except Exception as e:
         print(f"Live join error: {e}")
 
-# ==================== AFK SYSTEM (ALL MEMBERS) ====================
+# ==================== AFK SYSTEM (FOR ALL MEMBERS) ====================
 
-@app.on_message(filters.command("afk", prefixes=[".", "/"]))
-async def afk_handler(client, message):
+@app.on_message(filters.regex(r"^[./](?i)afk(\s+[\s\S]+)?$") & filters.group)
+async def afk_set_handler(client, message):
     user = message.from_user
     if not user:
         return
-    reason = "Busy"
-    if len(message.command) > 1:
-        reason = message.text.split(None, 1)[1]
+    parts = message.text.split(maxsplit=1)
+    reason = parts[1] if len(parts) > 1 else "Busy"
     AFK_USERS[user.id] = {"reason": reason, "time": time.time()}
     name = re.sub(r'[*_`\[\]()]', '', user.first_name or "User")
     await message.reply_text(f"💤 [{name}](tg://user?id={user.id}) ab **AFK** hain!\n**Reason:** `{reason}`")
 
-@app.on_message(filters.all, group=1)
-async def afk_detect(client, message):
+@app.on_message(filters.group, group=1)
+async def afk_listener_handler(client, message):
     user = message.from_user
     if not user:
         return
 
-    # 1. AFK user wapas bola toh status remove
+    # User wapas aaya
     if user.id in AFK_USERS and not (message.text and message.text.startswith((".", "/"))):
         data = AFK_USERS.pop(user.id)
         dur = get_readable_time(int(time.time() - data["time"]))
         name = re.sub(r'[*_`\[\]()]', '', user.first_name or "User")
         await message.reply_text(f"👋 Welcome back [{name}](tg://user?id={user.id})! Aap **{dur}** tak AFK the.")
 
-    # 2. AFK user ko reply kiya
+    # Reply check
     if message.reply_to_message and message.reply_to_message.from_user:
         rep = message.reply_to_message.from_user
         if rep.id in AFK_USERS:
@@ -137,7 +137,7 @@ async def afk_detect(client, message):
             await message.reply_text(f"⚠️ [{name}](tg://user?id={rep.id}) abhi **AFK** hain!\n**Reason:** `{data['reason']}`\n**Duration:** `{dur}`")
             return
 
-    # 3. AFK user ko mention kiya
+    # Mention check
     if message.entities:
         for ent in message.entities:
             if ent.type.name == "TEXT_MENTION" and ent.user and ent.user.id in AFK_USERS:
@@ -147,17 +147,19 @@ async def afk_detect(client, message):
                 await message.reply_text(f"⚠️ [{name}](tg://user?id={ent.user.id}) abhi **AFK** hain!\n**Reason:** `{data['reason']}`\n**Duration:** `{dur}`")
                 break
 
-# ==================== ADMIN TOOLS (STRICTLY FOR ITACHI & NOOR) ====================
+# ==================== ADMIN TOOLS (ITACHI & NOOR EXCLUSIVE) ====================
 
-@app.on_message(filters.command("promote", prefixes=[".", "/"]))
+@app.on_message(filters.regex(r"^[./](?i)promote(\s+[\s\S]+)?$") & filters.group)
 async def promote_handler(client, message):
-    if not is_owner(message):
+    if not is_admin_or_owner(message):
         return
     target = message.reply_to_message.from_user if message.reply_to_message else None
     if not target:
-        return await message.reply_text("⚠️ Kisi user ke message par reply karke `.promote <title>` likhein.")
-    
-    title = message.text.split(None, 1)[1][:16] if len(message.command) > 1 else "Admin"
+        return await message.reply_text("⚠️ Kisi ke message par reply karke `.promote <title>` likhein.")
+
+    parts = message.text.split(maxsplit=1)
+    title = parts[1][:16] if len(parts) > 1 else "Admin"
+
     try:
         await client.promote_chat_member(
             chat_id=message.chat.id,
@@ -180,13 +182,14 @@ async def promote_handler(client, message):
     except Exception as e:
         await message.reply_text(f"❌ Promote error: `{e}`")
 
-@app.on_message(filters.command("demote", prefixes=[".", "/"]))
+@app.on_message(filters.regex(r"^[./](?i)demote") & filters.group)
 async def demote_handler(client, message):
-    if not is_owner(message):
+    if not is_admin_or_owner(message):
         return
     target = message.reply_to_message.from_user if message.reply_to_message else None
     if not target:
         return await message.reply_text("⚠️ Kisi admin ke message par reply karke `.demote` likhein.")
+
     try:
         await client.promote_chat_member(
             chat_id=message.chat.id,
@@ -198,13 +201,14 @@ async def demote_handler(client, message):
     except Exception as e:
         await message.reply_text(f"❌ Demote error: `{e}`")
 
-@app.on_message(filters.command("kick", prefixes=[".", "/"]))
+@app.on_message(filters.regex(r"^[./](?i)kick") & filters.group)
 async def kick_handler(client, message):
-    if not is_owner(message):
+    if not is_admin_or_owner(message):
         return
     target = message.reply_to_message.from_user if message.reply_to_message else None
     if not target:
         return await message.reply_text("⚠️ Kisi ke message par reply karke `.kick` likhein.")
+
     try:
         await client.ban_chat_member(message.chat.id, target.id)
         await client.unban_chat_member(message.chat.id, target.id)
@@ -213,13 +217,14 @@ async def kick_handler(client, message):
     except Exception as e:
         await message.reply_text(f"❌ Kick error: `{e}`")
 
-@app.on_message(filters.command("ban", prefixes=[".", "/"]))
+@app.on_message(filters.regex(r"^[./](?i)ban") & filters.group)
 async def ban_handler(client, message):
-    if not is_owner(message):
+    if not is_admin_or_owner(message):
         return
     target = message.reply_to_message.from_user if message.reply_to_message else None
     if not target:
         return await message.reply_text("⚠️ Kisi ke message par reply karke `.ban` likhein.")
+
     try:
         await client.ban_chat_member(message.chat.id, target.id)
         name = re.sub(r'[*_`\[\]()]', '', target.first_name or "User")
@@ -228,6 +233,6 @@ async def ban_handler(client, message):
         await message.reply_text(f"❌ Ban error: `{e}`")
 
 if __name__ == "__main__":
-    print("Userbot Online - Owner Itachi & Noor configured!")
+    print("Userbot Active - Fully Listening to Itachi & Noor!")
     app.run()
     
