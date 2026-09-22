@@ -1,12 +1,14 @@
 import os
 import re
 import random
+import time
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.types import Message, ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
 
 welcome_data = {}
-processed_joins = set()
+# Deduplication map: {f"{chat_id}_{user_id}": last_welcome_timestamp}
+recent_welcomes = {}
 
 DEFAULT_WELCOME = (
     "<blockquote expandable>✨ <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙩𝙤 𝙩𝙝𝙚 𝙜𝙧𝙤𝙪𝙥</b> ✨\n"
@@ -48,7 +50,6 @@ def parse_buttons(raw_text: str):
             for m in matches:
                 title = m[0].strip()
                 url = m[1].strip() if m[1] else m[2].strip()
-                # Clean any previous emojis if present
                 clean_title = re.sub(r'^[^\w\s\(\)\[\]\{\}<>\/\\-]+\s*', '', title).strip()
                 row.append({"text": clean_title or title, "url": url})
             if row:
@@ -63,7 +64,6 @@ def build_randomized_keyboard(button_rows):
     if not button_rows:
         return None
 
-    # Pick random distinct emojis for this specific welcome message
     total_buttons = sum(len(r) for r in button_rows)
     chosen_emojis = random.sample(AESTHETIC_EMOJIS, min(total_buttons, len(AESTHETIC_EMOJIS)))
     
@@ -112,6 +112,14 @@ def apply_template_tags(template: str, user, chat_title: str) -> str:
     return res
 
 async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: str):
+    # Smart Anti-Duplicate Lock: Block duplicate welcome for the same user within 15 seconds
+    now = time.time()
+    dedup_key = f"{chat_id}_{user.id}"
+    if dedup_key in recent_welcomes:
+        if now - recent_welcomes[dedup_key] < 15:
+            return
+    recent_welcomes[dedup_key] = now
+
     settings = welcome_data.get(chat_id, {
         "enabled": True,
         "type": "text",
@@ -252,18 +260,28 @@ async def reset_welcome_cmd(client: Client, message: Message):
     welcome_data[message.chat.id] = {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "button_rows": []}
     await message.reply_text("<blockquote>🔄 <b>Welcome message reset to default!</b></blockquote>", parse_mode=ParseMode.HTML)
 
-# ==================== Single Unified Member Join Handler ====================
-# Deduped: Sirf 1 baar welcome trigger hoga
+# ==================== Event 1: Manual Approvals / Invite Link Joins ====================
+@Client.on_chat_member_updated()
+async def member_status_update(client: Client, update: ChatMemberUpdated):
+    old_status = update.old_chat_member.status if update.old_chat_member else None
+    new_status = update.new_chat_member.status if update.new_chat_member else None
+
+    # Detects when an admin manually approves a join request OR user joins via invite link
+    if old_status in [None, ChatMemberStatus.LEFT, ChatMemberStatus.BANNED] and new_status == ChatMemberStatus.MEMBER:
+        bot = await client.get_me()
+        user = update.new_chat_member.user
+        if not user or user.id == bot.id:
+            return
+        chat_title = update.chat.title or "Group"
+        await send_welcome_payload(client, update.chat.id, user, chat_title)
+
+# ==================== Event 2: Direct / Service Message Joins ====================
 @Client.on_message(filters.new_chat_members & filters.group)
 async def welcome_new_member_msg(client: Client, message: Message):
     bot = await client.get_me()
     for user in message.new_chat_members:
         if user.id == bot.id:
             continue
-        dedup_key = f"{message.chat.id}_{user.id}_{message.date.timestamp() if message.date else ''}"
-        if dedup_key in processed_joins:
-            continue
-        processed_joins.add(dedup_key)
         chat_title = message.chat.title or "Group"
         await send_welcome_payload(client, message.chat.id, user, chat_title)
         
