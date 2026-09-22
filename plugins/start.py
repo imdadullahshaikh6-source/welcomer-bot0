@@ -11,7 +11,7 @@ SUPPORT_GROUP_URL = "https://t.me/+UCmLt1cgPhI1MjFl"
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Bot API HTTP Caller for styles and reactions
+# Bot API HTTP Caller jo Button Colors (style) ko preserve rakhta hai
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -47,7 +47,7 @@ GROUP_START_TEXT = (
     "<blockquote>✨ <b>Zoya is active here!</b> 🎀\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
     "Hey {mention}! Main is group ko safe aur clean rakhne ke liye tayar hoon.\n\n"
-    "⚙️ Commands aur formatting guide ke liye mere <b>PM (DM)</b> mein check karein!</blockquote>"
+    "⚙️ Commands aur settings ke liye mere <b>PM (DM)</b> mein check karein!</blockquote>"
 )
 
 HELP_TEXT = (
@@ -56,7 +56,6 @@ HELP_TEXT = (
     "Niche diye gaye modules par tap karke controls dekhein:</blockquote>"
 )
 
-# Complete Formatted Guide for Welcome, Buttons, Tags and Quotes
 FORMATTING_GUIDE_TEXT = (
     "<blockquote>📖 <b>𝙁𝙤𝙧𝙢𝙖𝙩𝙩𝙞𝙣𝙜 & 𝙎𝙮𝙣𝙩𝙖𝙭 𝙂𝙪𝙞𝙙𝙚</b> ✨\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
@@ -77,12 +76,13 @@ FORMATTING_GUIDE_TEXT = (
     "• <i>Ek Hi Line Mein Do Buttons:</i>\n"
     "<code>[Channel](https://t.me/link) [Group](https://t.me/link)</code>\n\n"
     "🎨 <b>4. Quotes Format (Expandable):</b>\n"
-    "• Bot automatically aapke captions ko stylish <code>&lt;blockquote expandable&gt;</code> mein wrap kar deta hai jisse message clean aur collapseable dikhta hai.\n\n"
+    "• Bot automatically captions ko stylish <code>&lt;blockquote expandable&gt;</code> mein wrap kar deta hai.\n\n"
     "🛡️ <b>5. Moderation Format:</b>\n"
     "• Reply karke: <code>.ban</code> | <code>.unban</code> | <code>.mute</code>\n"
-    "• Direct Tag karke: <code>.ban @username</code> ya <code>.ban Noor</code></blockquote>"
+    "• Tag karke: <code>.ban @username</code> ya <code>.ban Noor</code></blockquote>"
 )
 
+# First Page Layout (Original clean look)
 def get_start_markup(bot_username: str):
     owner_url = f"https://t.me/{OWNER_USERNAME}"
     add_bot_url = f"https://t.me/{bot_username}?startgroup=true"
@@ -90,8 +90,7 @@ def get_start_markup(bot_username: str):
     return {
         "inline_keyboard": [
             [
-                {"text": "⚡ COMMANDS", "callback_data": "open_commands", "style": "success"},
-                {"text": "🎨 FORMATTING", "callback_data": "open_formatting", "style": "success"}
+                {"text": "⚡ COMMANDS", "callback_data": "open_commands", "style": "success"}
             ],
             [
                 {"text": "👑 OWNER", "url": owner_url, "style": "success"},
@@ -115,6 +114,7 @@ def get_group_markup(bot_username: str):
         ]
     }
 
+# Inside Commands Menu: Added "🎨 Formatting" here
 def get_commands_menu():
     return {
         "inline_keyboard": [
@@ -131,15 +131,16 @@ def get_commands_menu():
                 {"text": "📩 Request Accept", "callback_data": "cmd_req", "style": "success"}
             ],
             [
+                {"text": "📖 Formatting Guide", "callback_data": "open_formatting", "style": "success"}
+            ],
+            [
                 {"text": "« Back To Home", "callback_data": "back_to_start", "style": "success"}
             ]
         ]
     }
 
-# Handles /start in BOTH Private and Groups
 @Client.on_message(filters.command("start", prefixes=["/", "."]))
 async def start_handler(client: Client, message: Message):
-    # Reaction handling
     try:
         reaction_payload = {
             "chat_id": message.chat.id,
@@ -154,7 +155,6 @@ async def start_handler(client: Client, message: Message):
     first_name = message.from_user.first_name or "Friend"
     mention = f"<a href='tg://user?id={message.from_user.id}'>{first_name}</a>"
 
-    # Private DM Flow
     if message.chat.type.name == "PRIVATE":
         caption = DM_START_TEXT.format(mention=mention)
         markup = get_start_markup(bot.username)
@@ -167,8 +167,6 @@ async def start_handler(client: Client, message: Message):
             "reply_markup": markup
         }
         await call_tg_bot_api("sendMessage", payload)
-
-    # Group Flow
     else:
         caption = GROUP_START_TEXT.format(mention=mention)
         markup = get_group_markup(bot.username)
@@ -199,7 +197,7 @@ async def commands_callback(client: Client, query: CallbackQuery):
 async def formatting_callback(client: Client, query: CallbackQuery):
     back_btn = {
         "inline_keyboard": [
-            [{"text": "« Back To Home", "callback_data": "back_to_start", "style": "success"}]
+            [{"text": "« Back To Modules", "callback_data": "open_commands", "style": "success"}]
         ]
     }
     payload = {
@@ -239,7 +237,7 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
         "admin": "🛡️ <b>Admin Controls:</b>\n• <code>.promote &lt;title&gt;</code>\n• <code>.demote</code>\n• <code>.mute</code> / <code>.unmute</code>\n• <code>.ban</code> / <code>.kick</code>",
         "pin": "📌 <b>Pin Controls:</b>\n• <code>.pin</code> (silent)\n• <code>.pin loud</code>\n• <code>.unpin</code> / <code>.unpinall</code>",
         "greet": "🎉 <b>Greetings:</b>\n• <code>.setwelcome</code> (Media caption reply)\n• <code>.welcome on/off</code>\n• <code>.getwelcome</code>\n• <code>.resetwelcome</code>",
-        "quotes": "🎨 <b>Quotes Engine:</b>\n• Expandable aesthetic blockquote format activated automatically!",
+        "quotes": "🎨 <b>Quotes Engine:</b>\n• Expandable aesthetic blockquote format automatically activated!",
         "afk": "💤 <b>AFK Module:</b>\n• <code>.afk &lt;reason&gt;</code> to set offline status.",
         "req": "📩 <b>Join Requests:</b>\n• Auto-approves group join requests instantly."
     }
