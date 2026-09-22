@@ -1,12 +1,13 @@
 import io
 import json
 import urllib.request
+from PIL import Image
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
 QUOTLY_URL = "https://quote.yuri.ly/generate"
 
-def make_quote(payload: dict) -> bytes:
+def generate_quotly(payload: dict) -> io.BytesIO:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         QUOTLY_URL,
@@ -16,8 +17,18 @@ def make_quote(payload: dict) -> bytes:
             "User-Agent": "Mozilla/5.0"
         }
     )
-    with urllib.request.urlopen(req, timeout=12) as response:
-        return response.read()
+    with urllib.request.urlopen(req, timeout=15) as response:
+        raw_bytes = response.read()
+
+    # Image ko Telegram sticker dimensions (max 512x512) ke according strictly format karein
+    img = Image.open(io.BytesIO(raw_bytes))
+    img.thumbnail((512, 512))
+
+    sticker_bio = io.BytesIO()
+    sticker_bio.name = "sticker.webp"
+    img.save(sticker_bio, format="WEBP")
+    sticker_bio.seek(0)
+    return sticker_bio
 
 @Client.on_message(filters.command(["q", "quote"], prefixes=[".", "/"]) & filters.group)
 async def quotly_cmd(client: Client, message: Message):
@@ -51,7 +62,7 @@ async def quotly_cmd(client: Client, message: Message):
         "format": "webp",
         "backgroundColor": "#1b1429",
         "width": 512,
-        "height": 768,
+        "height": 512,
         "scale": 2,
         "messages": [
             {
@@ -69,18 +80,13 @@ async def quotly_cmd(client: Client, message: Message):
     }
 
     try:
-        # Background me image fetch
-        sticker_bytes = await client.loop.run_in_executor(None, make_quote, payload)
-
-        sticker_io = io.BytesIO(sticker_bytes)
-        sticker_io.name = "sticker.webp"
-        sticker_io.seek(0)
+        sticker_bio = await client.loop.run_in_executor(None, generate_quotly, payload)
 
         await client.send_sticker(
             chat_id=message.chat.id,
-            sticker=sticker_io,
+            sticker=sticker_bio,
             reply_to_message_id=reply.id
         )
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Error:</b> <code>{e}</code></blockquote>")
-      
+        
