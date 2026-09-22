@@ -20,7 +20,7 @@ DEFAULT_WELCOME = (
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Pure direct Telegram Bot API HTTP Dispatcher (supports official 'style' field)
+# Direct Bot API JSON Call (preserves button styles: primary, danger, success)
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -32,14 +32,63 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
 
     def _sync():
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=20) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as he:
             err = he.read().decode("utf-8", errors="ignore")
-            print(f"[BotAPI HTTP {he.code}] {err}")
+            print(f"[BotAPI JSON Error {he.code}] {err}")
             return None
         except Exception as e:
-            print(f"[BotAPI Error] {e}")
+            print(f"[BotAPI Conn Error] {e}")
+            return None
+
+    return await asyncio.to_thread(_sync)
+
+# Multipart Uploader: sends actual media binary straight to Bot API so styled buttons never drop
+async def upload_media_bot_api(endpoint: str, file_path: str, field_name: str, caption: str, keyboard: dict, chat_id: int):
+    token = get_token()
+    if not token or not os.path.exists(file_path):
+        return None
+
+    boundary = "----WebKitFormBoundaryTelegramStyle"
+    body = bytearray()
+
+    fields = {
+        "chat_id": str(chat_id),
+        "caption": caption,
+        "parse_mode": "HTML",
+        "reply_markup": json.dumps(keyboard) if keyboard else None
+    }
+
+    for key, val in fields.items():
+        if val is None:
+            continue
+        body.extend(f"--{boundary}\r\n".encode())
+        body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode())
+        body.extend(f"{val}\r\n".encode())
+
+    filename = os.path.basename(file_path)
+    body.extend(f"--{boundary}\r\n".encode())
+    body.extend(f'Content-Disposition: form-data; name="{field_name}"; filename="{filename}"\r\n'.encode())
+    body.extend(b"Content-Type: application/octet-stream\r\n\r\n")
+    with open(file_path, "rb") as f:
+        body.extend(f.read())
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode())
+
+    url = f"https://api.telegram.org/bot{token}/{endpoint}"
+    req = urllib.request.Request(url, data=bytes(body), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+
+    def _sync():
+        try:
+            with urllib.request.urlopen(req, timeout=35) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as he:
+            err = he.read().decode("utf-8", errors="ignore")
+            print(f"[BotAPI Multipart Error {he.code}] {err}")
+            return None
+        except Exception as e:
+            print(f"[BotAPI Multipart Conn Error] {e}")
             return None
 
     return await asyncio.to_thread(_sync)
@@ -56,18 +105,13 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
 # 2nd button: danger (Red)
 # 3rd button: success (Green)
 PALETTE_STYLES = ["primary", "danger", "success"]
-PALETTE_EMOJIS = ["🔵", "🔴", "🟢"]
 
 def parse_buttons(raw_text: str):
     if not raw_text:
         return "", None
 
-    # Matches:
-    # 1. [Title](buttonurl:https://...)
-    # 2. [Title](https://...)
-    # 3. [Title | https://...]
     btn_regex = re.compile(
-        r"\[([^\[\]\(\)\|]+)\](?:\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\|\s*(https?://[^\[\]\|\s]+))"
+        r"\[([^\[\]\(\)\|]+)\](?:\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\|\s*(https?://[^\[\]\|\s]+)(?:\s*\|\s*([a-zA-Z]+))?\]?)"
     )
 
     buttons = []
@@ -76,30 +120,35 @@ def parse_buttons(raw_text: str):
     btn_idx = 0
 
     for line in lines:
-        matches = btn_regex.findall(line)
-        if matches:
-            row = []
-            for m in matches:
-                title = m[0].strip()
-                url = m[1].strip() if m[1] else m[2].strip()
+        if "[" in line and "http" in line:
+            matches = btn_regex.findall(line)
+            if matches:
+                row = []
+                for m in matches:
+                    title = m[0].strip()
+                    url = m[1].strip() if m[1] else m[2].strip()
+                    explicit_style = (m[3] or "").strip().lower()
 
-                style = PALETTE_STYLES[btn_idx % len(PALETTE_STYLES)]
-                emoji_badge = PALETTE_EMOJIS[btn_idx % len(PALETTE_EMOJIS)]
-                btn_idx += 1
+                    if explicit_style in ["blue", "primary"]:
+                        style = "primary"
+                    elif explicit_style in ["red", "danger"]:
+                        style = "danger"
+                    elif explicit_style in ["green", "success"]:
+                        style = "success"
+                    else:
+                        style = PALETTE_STYLES[btn_idx % len(PALETTE_STYLES)]
+                        btn_idx += 1
 
-                # Clean title if it already has emoji
-                cleaned_title = re.sub(r'^[🔵🔴🟢]\s*', '', title)
-                final_title = f"{emoji_badge} {cleaned_title}"
+                    row.append({
+                        "text": title,
+                        "url": url,
+                        "style": style
+                    })
+                if row:
+                    buttons.append(row)
+                    continue
 
-                row.append({
-                    "text": final_title,
-                    "url": url,
-                    "style": style
-                })
-            if row:
-                buttons.append(row)
-        else:
-            cleaned_lines.append(line)
+        cleaned_lines.append(line)
 
     cleaned_text = "\n".join(cleaned_lines).rstrip()
     keyboard = {"inline_keyboard": buttons} if buttons else None
@@ -141,6 +190,7 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
         "enabled": True,
         "type": "text",
         "file_id": None,
+        "bot_api_file_id": None,
         "text": DEFAULT_WELCOME,
         "keyboard": None
     })
@@ -152,64 +202,87 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
     keyboard = settings.get("keyboard")
     m_type = settings.get("type", "text")
     f_id = settings.get("file_id")
+    bot_api_file_id = settings.get("bot_api_file_id")
 
     caption = apply_template_tags(raw_template, user, chat_title)
 
-    payload = {
-        "chat_id": chat_id,
-        "parse_mode": "HTML"
-    }
-    if keyboard:
-        payload["reply_markup"] = keyboard
+    # If cached Bot API file_id exists, send directly via Bot API to ensure colored buttons
+    if bot_api_file_id:
+        endpoint = "sendVideo" if m_type in ["video", "animation"] else "sendPhoto"
+        field = "video" if m_type in ["video", "animation"] else "photo"
+        payload = {
+            "chat_id": chat_id,
+            field: bot_api_file_id,
+            "caption": caption,
+            "parse_mode": "HTML"
+        }
+        if keyboard:
+            payload["reply_markup"] = keyboard
+        res = await call_tg_bot_api(endpoint, payload)
+        if res and res.get("ok"):
+            return
 
-    # 1. Direct Telegram Bot API HTTP Call (passes 'style' attributes)
-    sent_successfully = False
-    if m_type == "photo" and f_id:
-        payload["photo"] = f_id
-        payload["caption"] = caption
-        res = await call_tg_bot_api("sendPhoto", payload)
-        if res and res.get("ok"):
-            sent_successfully = True
-    elif m_type in ["video", "animation"] and f_id:
-        payload["video"] = f_id
-        payload["caption"] = caption
-        res = await call_tg_bot_api("sendVideo", payload)
-        if not (res and res.get("ok")):
-            payload.pop("video", None)
-            payload["animation"] = f_id
-            res = await call_tg_bot_api("sendAnimation", payload)
-        if res and res.get("ok"):
-            sent_successfully = True
-    elif m_type == "text":
-        payload["text"] = caption
-        payload["disable_web_page_preview"] = True
+    # If text message
+    if m_type == "text" or not f_id:
+        payload = {
+            "chat_id": chat_id,
+            "text": caption,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }
+        if keyboard:
+            payload["reply_markup"] = keyboard
         res = await call_tg_bot_api("sendMessage", payload)
         if res and res.get("ok"):
-            sent_successfully = True
+            return
 
-    # 2. Pyrogram Native Fallback so message NEVER drops
-    if not sent_successfully:
-        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        fallback_markup = None
-        if keyboard and "inline_keyboard" in keyboard:
-            fallback_buttons = [
-                [InlineKeyboardButton(text=btn["text"], url=btn["url"]) for btn in row]
-                for row in keyboard["inline_keyboard"]
-            ]
-            if fallback_buttons:
-                fallback_markup = InlineKeyboardMarkup(fallback_buttons)
+    # Download media and upload directly to Bot API to get real Bot API file_id & native styles
+    try:
+        dl_path = await client.download_media(f_id)
+        if dl_path and os.path.exists(dl_path):
+            endpoint = "sendVideo" if m_type in ["video", "animation"] else "sendPhoto"
+            field = "video" if m_type in ["video", "animation"] else "photo"
+            res = await upload_media_bot_api(endpoint, dl_path, field, caption, keyboard, chat_id)
+            try:
+                os.remove(dl_path)
+            except Exception:
+                pass
 
-        try:
-            if m_type == "photo" and f_id:
-                await client.send_photo(chat_id=chat_id, photo=f_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
-            elif m_type == "video" and f_id:
-                await client.send_video(chat_id=chat_id, video=f_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
-            elif m_type == "animation" and f_id:
-                await client.send_animation(chat_id=chat_id, animation=f_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
-            else:
-                await client.send_message(chat_id=chat_id, text=caption, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=fallback_markup)
-        except Exception as e:
-            print(f"[Fallback error]: {e}")
+            if res and res.get("ok"):
+                # Cache Bot API file ID for subsequent instant sends
+                res_obj = res["result"]
+                new_fid = None
+                if "video" in res_obj:
+                    new_fid = res_obj["video"]["file_id"]
+                elif "animation" in res_obj:
+                    new_fid = res_obj["animation"]["file_id"]
+                elif "photo" in res_obj:
+                    new_fid = res_obj["photo"][-1]["file_id"]
+                if new_fid:
+                    welcome_data[chat_id]["bot_api_file_id"] = new_fid
+                return
+    except Exception as e:
+        print(f"[Direct Upload Dispatch Error]: {e}")
+
+    # Fallback to Pyrogram standard send if Bot API rejects request
+    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    fallback_markup = None
+    if keyboard and "inline_keyboard" in keyboard:
+        fallback_buttons = [
+            [InlineKeyboardButton(text=b["text"], url=b["url"]) for b in row]
+            for row in keyboard["inline_keyboard"]
+        ]
+        if fallback_buttons:
+            fallback_markup = InlineKeyboardMarkup(fallback_buttons)
+
+    if m_type == "video" and f_id:
+        await client.send_video(chat_id=chat_id, video=f_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
+    elif m_type == "animation" and f_id:
+        await client.send_animation(chat_id=chat_id, animation=f_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
+    elif m_type == "photo" and f_id:
+        await client.send_photo(chat_id=chat_id, photo=f_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
+    else:
+        await client.send_message(chat_id=chat_id, text=caption, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=fallback_markup)
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -258,6 +331,7 @@ async def set_welcome_msg(client: Client, message: Message):
         "enabled": True,
         "type": media_type,
         "file_id": file_id,
+        "bot_api_file_id": None,
         "text": final_text,
         "keyboard": parsed_keyboard
     }
@@ -270,7 +344,7 @@ async def set_welcome_msg(client: Client, message: Message):
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
         f"🎬 <b>Media:</b> <code>{media_type.upper()}</code>\n"
-        f"🎨 <b>Buttons Configured:</b> <code>{btn_count} Buttons (Blue 🔵 &amp; Red 🔴)</code>\n"
+        f"🎨 <b>Buttons Configured:</b> <code>{btn_count} Buttons (Bot API Style Injected)</code>\n"
         "⚡ <b>Status:</b> Saved Successfully!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
@@ -295,7 +369,7 @@ async def toggle_welcome(client: Client, message: Message):
 
     mode = args[1].lower()
     if chat_id not in welcome_data:
-        welcome_data[chat_id] = {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
+        welcome_data[chat_id] = {"enabled": True, "type": "text", "file_id": None, "bot_api_file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
 
     admin_name = message.from_user.first_name or "Admin"
 
@@ -317,7 +391,7 @@ async def get_welcome_cmd(client: Client, message: Message):
 async def reset_welcome_cmd(client: Client, message: Message):
     if not message.from_user or not await is_admin(client, message.from_user.id, message.chat.id):
         return
-    welcome_data[message.chat.id] = {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
+    welcome_data[message.chat.id] = {"enabled": True, "type": "text", "file_id": None, "bot_api_file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
     await message.reply_text("<blockquote>🔄 <b>Welcome message reset to default!</b></blockquote>", parse_mode=ParseMode.HTML)
 
 # ==================== Member Join Handlers ====================
@@ -342,4 +416,4 @@ async def welcome_new_member_msg(client: Client, message: Message):
             continue
         chat_title = message.chat.title or "Group"
         await send_welcome_payload(client, message.chat.id, user, chat_title)
-    
+                                   
