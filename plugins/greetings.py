@@ -21,11 +21,6 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
         return False
 
 def parse_buttons_and_clean_text(raw_text: str):
-    """
-    Parses both button formats:
-    1) [Text](buttonurl:https://...)
-    2) [Text | https://...]
-    """
     if not raw_text:
         return "", None
 
@@ -53,19 +48,33 @@ def parse_buttons_and_clean_text(raw_text: str):
     return cleaned_text, keyboard
 
 def format_exact_quotes(html_text: str) -> str:
-    """
-    Pehle blockquote ko collapsible (<blockquote expandable>) rakhta hai,
-    aur baaki sabhi blockquotes ko standard (non-collapse) banata hai.
-    """
     if not html_text:
         return ""
-
-    # Sabse pehle saare blockquotes ko clean standard <blockquote> banayein
     cleaned = re.sub(r'<blockquote[^>]*>', '<blockquote>', html_text)
+    return re.sub(r'<blockquote>', '<blockquote expandable>', cleaned, count=1)
 
-    # Sirf pehle wale <blockquote> ko <blockquote expandable> banayein
-    result = re.sub(r'<blockquote>', '<blockquote expandable>', cleaned, count=1)
-    return result
+def apply_template_tags(template: str, user, chat_title: str) -> str:
+    first_name = user.first_name or "Member"
+    last_name = user.last_name or ""
+    full_name = f"{first_name} {last_name}".strip()
+    mention = f"<a href='tg://user?id={user.id}'>{first_name}</a>"
+    username = f"@{user.username}" if user.username else mention
+
+    replacements = {
+        "{first}": mention,
+        "{name}": mention,
+        "{fullname}": f"<a href='tg://user?id={user.id}'>{full_name}</a>",
+        "{mention}": mention,
+        "{username}": username,
+        "{id}": str(user.id),
+        "{chat}": chat_title,
+        "{title}": chat_title
+    }
+
+    res = template
+    for key, val in replacements.items():
+        res = re.sub(re.escape(key), val, res, flags=re.IGNORECASE)
+    return res
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -106,14 +115,12 @@ async def set_welcome_msg(client: Client, message: Message):
             target_text = parts[1]
 
     if not target_text and not file_id:
-        help_txt = (
-            "<blockquote>⚠️ <b>Kisi message/media par reply karke <code>.setwelcome</code> likhein.</b></blockquote>"
+        return await message.reply_text(
+            "<blockquote>⚠️ <b>Kisi message/media par reply karke <code>.setwelcome</code> likhein.</b></blockquote>",
+            parse_mode=ParseMode.HTML
         )
-        return await message.reply_text(help_txt, parse_mode=ParseMode.HTML)
 
     cleaned_text, parsed_keyboard = parse_buttons_and_clean_text(target_text)
-    
-    # Sirf pehla note collapse, doosra note normal
     final_text = format_exact_quotes(cleaned_text)
     final_keyboard = custom_keyboard or parsed_keyboard
 
@@ -130,9 +137,8 @@ async def set_welcome_msg(client: Client, message: Message):
         "<blockquote>🎉 <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙢𝙚𝙨𝙨𝙖𝙜𝙚 𝙨𝙚𝙩</b> 🎉\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
-        "✨ <b>Note 1:</b> Collapsible (Expandable)\n"
-        "📖 <b>Note 2:</b> Full Open (No collapse)\n"
-        "⚡ <b>Status:</b> Perfect styling saved!</blockquote>"
+        "✨ <b>Tags:</b> <code>{first}</code>, <code>{username}</code>, <code>{id}</code> ready!\n"
+        "⚡ <b>Status:</b> Mentions & custom tags perfectly linked!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
 
@@ -219,18 +225,8 @@ async def welcome_new_member(client: Client, message: Message):
         m_type = settings.get("type", "text")
         f_id = settings.get("file_id")
 
-        first_name = user.first_name or "Member"
-        mention = f"<a href='tg://user?id={user.id}'>{first_name}</a>"
         chat_title = message.chat.title or "Group"
-
-        # Tag replacement
-        formatted_text = (
-            raw_template
-            .replace("{mention}", mention)
-            .replace("{name}", first_name)
-            .replace("{chat}", chat_title)
-            .replace("{id}", str(user.id))
-        )
+        formatted_text = apply_template_tags(raw_template, user, chat_title)
 
         try:
             if m_type == "photo" and f_id:
