@@ -32,12 +32,13 @@ def get_readable_time(seconds: int) -> str:
     return f"{s}s"
 
 # ==================== TEST COMMAND ====================
-@app.on_message(filters.command(["ping", "test"], prefixes=[".", "/"]))
+# filters.me lagane se Noor ID ke khud ke messages bhi sunega
+@app.on_message(filters.command(["ping", "test"], prefixes=[".", "/"]) & (filters.group | filters.me))
 async def ping_test(client, message):
     await message.reply_text("🏓 **PONG! Noor Userbot is Active and Working!**")
 
 # ==================== START / STOP ====================
-@app.on_message(filters.command(["start", "stop"], prefixes=[".", "/"]))
+@app.on_message(filters.command(["start", "stop"], prefixes=[".", "/"]) & (filters.group | filters.me))
 async def start_stop(client, message):
     global IS_ACTIVE
     cmd = message.command[0].lower()
@@ -72,7 +73,7 @@ async def process_requests(client, chat_id):
         TASK_RUNNING = False
 
 # ==================== AFK SYSTEM ====================
-@app.on_message(filters.command("afk", prefixes=[".", "/"]) & filters.group)
+@app.on_message(filters.command("afk", prefixes=[".", "/"]) & (filters.group | filters.me))
 async def afk_handler(client, message):
     user = message.from_user
     if not user:
@@ -83,7 +84,7 @@ async def afk_handler(client, message):
     AFK_USERS[user.id] = {"reason": reason, "time": time.time()}
     await message.reply_text(f"💤 [{user.first_name}](tg://user?id={user.id}) ab **AFK** hain!\n**Reason:** `{reason}`")
 
-@app.on_message(filters.group, group=1)
+@app.on_message(filters.group | filters.me, group=1)
 async def afk_detect(client, message):
     user = message.from_user
     if not user:
