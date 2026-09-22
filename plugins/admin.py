@@ -1,13 +1,42 @@
+import os
+import json
+import asyncio
+import urllib.request
 import re
 from pyrogram import Client, filters
 from pyrogram.types import (
     ChatPrivileges,
     ChatPermissions,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
     CallbackQuery,
     Message
 )
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
+
+DEMOTE_PRIVILEGES = ChatPrivileges(
+    can_manage_chat=False,
+    can_delete_messages=False,
+    can_restrict_members=False,
+    can_invite_users=False,
+    can_pin_messages=False,
+    can_manage_video_chats=False,
+    can_promote_members=False
+)
+
+async def call_tg_bot_api(endpoint: str, payload: dict):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{endpoint}"
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+
+    def _sync_post():
+        try:
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as err:
+            print(f"[BotAPI Admin Error] {err}")
+            return None
+
+    return await asyncio.to_thread(_sync_post)
 
 async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
     try:
@@ -23,28 +52,6 @@ def get_target(message: Message):
 
 def clean_txt(text: str) -> str:
     return re.sub(r'[*_`\[\]()<>]', '', text or "User")
-
-DEMOTE_PRIVILEGES = ChatPrivileges(
-    can_manage_chat=False,
-    can_delete_messages=False,
-    can_restrict_members=False,
-    can_invite_users=False,
-    can_pin_messages=False,
-    can_manage_video_chats=False,
-    can_promote_members=False
-)
-
-# Helper for colored button creation
-def colored_button(text: str, callback_data: str = None, url: str = None, style: str = "primary"):
-    kwargs = {"text": text}
-    if callback_data:
-        kwargs["callback_data"] = callback_data
-    if url:
-        kwargs["url"] = url
-    try:
-        return InlineKeyboardButton(**kwargs, style=style)
-    except TypeError:
-        return InlineKeyboardButton(**kwargs)
 
 # ==================== PROMOTE ====================
 @Client.on_message(filters.command("promote", prefixes=[".", "/"]) & filters.group)
@@ -91,11 +98,18 @@ async def promote_cmd(client: Client, message: Message):
             "⚡ <b>Status:</b> Successfully Promoted!</blockquote>"
         )
 
-        keyboard = InlineKeyboardMarkup([
-            [colored_button("🔴 Demote User", callback_data=f"demote_{target.id}", style="danger")]
-        ])
+        markup = {
+            "inline_keyboard": [
+                [{"text": "🔴 Demote User", "callback_data": f"demote_{target.id}", "style": "danger"}]
+            ]
+        }
 
-        await message.reply_text(text=text, reply_markup=keyboard)
+        await call_tg_bot_api("sendMessage", {
+            "chat_id": message.chat.id,
+            "text": text,
+            "parse_mode": "HTML",
+            "reply_markup": markup
+        })
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Promote error:</b> <code>{e}</code></blockquote>")
 
@@ -161,11 +175,18 @@ async def pin_cmd(client: Client, message: Message):
             "⚡ <b>Status:</b> Message Successfully Pinned!</blockquote>"
         )
 
-        keyboard = InlineKeyboardMarkup([
-            [colored_button("🔴 Unpin Message", callback_data=f"unpinmsg_{message.reply_to_message.id}", style="danger")]
-        ])
+        markup = {
+            "inline_keyboard": [
+                [{"text": "🔴 Unpin Message", "callback_data": f"unpinmsg_{message.reply_to_message.id}", "style": "danger"}]
+            ]
+        }
 
-        await message.reply_text(text=text, reply_markup=keyboard)
+        await call_tg_bot_api("sendMessage", {
+            "chat_id": message.chat.id,
+            "text": text,
+            "parse_mode": "HTML",
+            "reply_markup": markup
+        })
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Pin Error:</b> <code>{e}</code></blockquote>")
 
@@ -239,11 +260,18 @@ async def mute_cmd(client: Client, message: Message):
             "⚡ <b>Status:</b> Muted indefinitely!</blockquote>"
         )
 
-        keyboard = InlineKeyboardMarkup([
-            [colored_button("🟢 Unmute User", callback_data=f"unmute_{target.id}", style="success")]
-        ])
+        markup = {
+            "inline_keyboard": [
+                [{"text": "🟢 Unmute User", "callback_data": f"unmute_{target.id}", "style": "success"}]
+            ]
+        }
 
-        await message.reply_text(text=text, reply_markup=keyboard)
+        await call_tg_bot_api("sendMessage", {
+            "chat_id": message.chat.id,
+            "text": text,
+            "parse_mode": "HTML",
+            "reply_markup": markup
+        })
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Mute error:</b> <code>{e}</code></blockquote>")
 
@@ -333,7 +361,12 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
                 f"👮 <b>Unpinned By:</b> <a href='tg://user?id={caller_id}'>{caller_name}</a>\n"
                 "⚡ <b>Status:</b> Message Unpinned via Quick Button!</blockquote>"
             )
-            await query.message.edit_text(text=updated_text, reply_markup=None)
+            await call_tg_bot_api("editMessageText", {
+                "chat_id": query.message.chat.id,
+                "message_id": query.message.id,
+                "text": updated_text,
+                "parse_mode": "HTML"
+            })
             await query.answer("✅ Message unpinned!")
         except Exception as e:
             await query.answer(f"Unpin failed: {e}", show_alert=True)
@@ -359,7 +392,12 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
                 f"👮 <b>Demoted By:</b> <a href='tg://user?id={caller_id}'>{caller_name}</a>\n"
                 "⚡ <b>Status:</b> Demoted via Quick Button!</blockquote>"
             )
-            await query.message.edit_text(text=updated_text, reply_markup=None)
+            await call_tg_bot_api("editMessageText", {
+                "chat_id": query.message.chat.id,
+                "message_id": query.message.id,
+                "text": updated_text,
+                "parse_mode": "HTML"
+            })
             await query.answer("✅ User demoted!")
         except Exception as e:
             await query.answer(f"Demote failed: {e}", show_alert=True)
@@ -390,10 +428,18 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
                 f"👮 <b>Unmuted By:</b> <a href='tg://user?id={caller_id}'>{caller_name}</a>\n"
                 "⚡ <b>Status:</b> Successfully Unmuted!</blockquote>"
             )
-            keyboard = InlineKeyboardMarkup([
-                [colored_button("🔴 Mute Again", callback_data=f"mute_{target_id}", style="danger")]
-            ])
-            await query.message.edit_text(text=updated_text, reply_markup=keyboard)
+            markup = {
+                "inline_keyboard": [
+                    [{"text": "🔴 Mute Again", "callback_data": f"mute_{target_id}", "style": "danger"}]
+                ]
+            }
+            await call_tg_bot_api("editMessageText", {
+                "chat_id": query.message.chat.id,
+                "message_id": query.message.id,
+                "text": updated_text,
+                "parse_mode": "HTML",
+                "reply_markup": markup
+            })
             await query.answer("✅ User unmuted!")
         except Exception as e:
             await query.answer(f"Unmute failed: {e}", show_alert=True)
@@ -419,11 +465,9 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
                 f"👮 <b>Muted By:</b> <a href='tg://user?id={caller_id}'>{caller_name}</a>\n"
                 "⚡ <b>Status:</b> Muted via Quick Button!</blockquote>"
             )
-            keyboard = InlineKeyboardMarkup([
-                [colored_button("🟢 Unmute User", callback_data=f"unmute_{target_id}", style="success")]
-            ])
-            await query.message.edit_text(text=updated_text, reply_markup=keyboard)
-            await query.answer("✅ User muted again!")
-        except Exception as e:
-            await query.answer(f"Mute failed: {e}", show_alert=True)
-    
+            markup = {
+                "inline_keyboard": [
+                    [{"text": "🟢 Unmute User", "callback_data": f"unmute_{target_id}", "style": "success"}]
+                ]
+            }
+     
