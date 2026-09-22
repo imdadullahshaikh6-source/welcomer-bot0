@@ -6,7 +6,7 @@ START_TEXT = """<blockquote>👑 <b>Hello {mention}</b>
 
 Main aapka <b>All-in-One Group Manager Bot</b> hoon.
 Groups ko manage karne, join requests auto-accept karne,
-aur pure chat environment ko maintain karne ke liye tayar hoon!
+aur text ko stickers me badalne ke liye tayar hoon!
 
 Niche diye gaye menu se mere features check karein:</blockquote>"""
 
@@ -33,6 +33,12 @@ WELCOMER_TEXT = """<blockquote>✨ <b>Join Welcomer & Automation:</b>
 • <code>.start</code> - Welcomer automation on karein
 • <code>.stop</code> - Welcomer automation pause karein</blockquote>"""
 
+QUOTE_TEXT = """<blockquote>🎨 <b>Quotly Sticker Generator:</b>
+
+• <code>.q</code> ya <code>/q</code> - Kisi bhi text message par reply karke stylish Quotly sticker banayein!
+• Sender ka profile photo, name aur text ek round aesthetic sticker ban jayega.
+• Group ka koi bhi member is feature ka use kar sakta hai.</blockquote>"""
+
 def start_keyboard(bot_username: str):
     return InlineKeyboardMarkup([
         [
@@ -40,7 +46,8 @@ def start_keyboard(bot_username: str):
             InlineKeyboardButton("💤 AFK System", callback_data="help_afk")
         ],
         [
-            InlineKeyboardButton("✨ Join Welcomer", callback_data="help_welcomer")
+            InlineKeyboardButton("✨ Join Welcomer", callback_data="help_welcomer"),
+            InlineKeyboardButton("🎨 Quote Sticker", callback_data="help_quote")
         ],
         [
             InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_username}?startgroup=true")
@@ -73,6 +80,8 @@ async def callback_handler(client, query: CallbackQuery):
         await query.message.edit_text(text=AFK_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_welcomer":
         await query.message.edit_text(text=WELCOMER_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
+    elif data == "help_quote":
+        await query.message.edit_text(text=QUOTE_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_back":
         await query.message.edit_text(
             text=START_TEXT.format(mention=mention),
