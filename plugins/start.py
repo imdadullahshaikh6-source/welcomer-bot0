@@ -82,7 +82,6 @@ FORMATTING_GUIDE_TEXT = (
     "• Tag karke: <code>.ban @username</code> ya <code>.ban Noor</code></blockquote>"
 )
 
-# First Page Layout (Original clean look)
 def get_start_markup(bot_username: str):
     owner_url = f"https://t.me/{OWNER_USERNAME}"
     add_bot_url = f"https://t.me/{bot_username}?startgroup=true"
@@ -114,7 +113,7 @@ def get_group_markup(bot_username: str):
         ]
     }
 
-# Inside Commands Menu: Added "🎨 Formatting" here
+# Commands Menu: Combined AFK & Quotes into single "Extra" button
 def get_commands_menu():
     return {
         "inline_keyboard": [
@@ -124,13 +123,10 @@ def get_commands_menu():
             ],
             [
                 {"text": "🎉 Greetings", "callback_data": "cmd_greet", "style": "success"},
-                {"text": "🎨 Quotes", "callback_data": "cmd_quotes", "style": "success"}
-            ],
-            [
-                {"text": "💤 AFK System", "callback_data": "cmd_afk", "style": "success"},
                 {"text": "📩 Request Accept", "callback_data": "cmd_req", "style": "success"}
             ],
             [
+                {"text": "✨ Extra", "callback_data": "cmd_extra", "style": "success"},
                 {"text": "📖 Formatting Guide", "callback_data": "open_formatting", "style": "success"}
             ],
             [
@@ -229,17 +225,53 @@ async def back_start_callback(client: Client, query: CallbackQuery):
     await call_tg_bot_api("editMessageText", payload)
     await query.answer()
 
-@Client.on_callback_query(filters.regex(r"^cmd_(admin|pin|greet|quotes|afk|req)$"))
+@Client.on_callback_query(filters.regex(r"^cmd_(admin|pin|greet|req|extra)$"))
 async def sub_commands_view(client: Client, query: CallbackQuery):
     mod = query.data.split("_")[1]
     
     details = {
-        "admin": "🛡️ <b>Admin Controls:</b>\n• <code>.promote &lt;title&gt;</code>\n• <code>.demote</code>\n• <code>.mute</code> / <code>.unmute</code>\n• <code>.ban</code> / <code>.kick</code>",
-        "pin": "📌 <b>Pin Controls:</b>\n• <code>.pin</code> (silent)\n• <code>.pin loud</code>\n• <code>.unpin</code> / <code>.unpinall</code>",
-        "greet": "🎉 <b>Greetings:</b>\n• <code>.setwelcome</code> (Media caption reply)\n• <code>.welcome on/off</code>\n• <code>.getwelcome</code>\n• <code>.resetwelcome</code>",
-        "quotes": "🎨 <b>Quotes Engine:</b>\n• Expandable aesthetic blockquote format automatically activated!",
-        "afk": "💤 <b>AFK Module:</b>\n• <code>.afk &lt;reason&gt;</code> to set offline status.",
-        "req": "📩 <b>Join Requests:</b>\n• Auto-approves group join requests instantly."
+        "admin": (
+            "🛡️ <b>Admin Controls:</b>\n"
+            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            "• <code>.ban</code> - User ko ban karein (reply ya tag)\n"
+            "• <code>.unban</code> - User ko unban karein\n"
+            "• <code>.kick</code> - User ko group se nikalen\n"
+            "• <code>.mute</code> / <code>.unmute</code> - Member ko chup ya un-mute karein\n"
+            "• <code>.promote &lt;title&gt;</code> - Admin banayein title ke sath\n"
+            "• <code>.demote</code> - Admin rights wapas lein"
+        ),
+        "pin": (
+            "📌 <b>Pin Controls:</b>\n"
+            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            "• <code>.pin</code> - Silent pin (bina notify kiye)\n"
+            "• <code>.pin loud</code> - Message pin karein aur sabko notify karein\n"
+            "• <code>.unpin</code> - Replied message ko unpin karein\n"
+            "• <code>.unpinall</code> - Saare pinned messages unpin karein"
+        ),
+        "greet": (
+            "🎉 <b>Greetings:</b>\n"
+            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            "• <code>.setwelcome</code> - Media/Message caption par reply karke welcome set karein\n"
+            "• <code>.welcome on/off</code> - Greetings toggle karein\n"
+            "• <code>.getwelcome</code> - Current welcome preview karein\n"
+            "• <code>.resetwelcome</code> - Default text par reset karein"
+        ),
+        "req": (
+            "📩 <b>Join Requests:</b>\n"
+            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            "• Group join requests aate hi bot instant approve karega aur member ko greeting message send karega."
+        ),
+        "extra": (
+            "✨ <b>Extra Features:</b>\n"
+            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            "💤 <b>AFK Module:</b>\n"
+            "• <code>.afk &lt;reason&gt;</code> - Offline status lagayein.\n"
+            "• Koi tag karega toh bot notify karega.\n"
+            "• Wapas aakar message karte hi automated <i>Welcome Back</i> notice aayega aur AFK hat jayega.\n\n"
+            "🎨 <b>Quotes (.q):</b>\n"
+            "• Kisi bhi text par reply karke <code>.q</code> bhejein.\n"
+            "• Clean aesthetic quote preview create hota hai."
+        )
     }
     
     text = f"<blockquote>{details.get(mod, 'Module details')}</blockquote>"
