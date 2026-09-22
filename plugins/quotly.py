@@ -1,5 +1,4 @@
-import io
-import base64
+import os
 import aiohttp
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -10,11 +9,11 @@ QUOTLY_API = "https://quote.yuri.ly/generate"
 async def quotly_maker(client: Client, message: Message):
     reply = message.reply_to_message
     if not reply:
-        return await message.reply_text("<blockquote>⚠️ <b>Kisi user ke text message par reply karke <code>.q</code> likhein.</b></blockquote>")
+        return await message.reply_text("<blockquote>⚠️ <b>Kisi ke message par reply karke <code>.q</code> likhein.</b></blockquote>")
 
     text = reply.text or reply.caption
     if not text:
-        return await message.reply_text("<blockquote>⚠️ <b>Sirf text message ka quote sticker banaya ja sakta hai.</b></blockquote>")
+        return await message.reply_text("<blockquote>⚠️ <b>Sirf text message ka quote sticker ban sakta hai.</b></blockquote>")
 
     user = reply.from_user
     if user:
@@ -27,16 +26,6 @@ async def quotly_maker(client: Client, message: Message):
         last_name = ""
         user_id = reply.sender_chat.id if reply.sender_chat else 1000
         username = ""
-
-    # User Profile Photo fetch karne ka try karein
-    avatar_base64 = None
-    try:
-        photos = [p async for p in client.get_chat_photos(user_id, limit=1)]
-        if photos:
-            photo_file = await client.download_media(photos[0].file_id, in_memory=True)
-            avatar_base64 = base64.b64encode(photo_file.getvalue()).decode("utf-8")
-    except Exception:
-        avatar_base64 = None
 
     payload = {
         "type": "quote",
@@ -60,23 +49,30 @@ async def quotly_maker(client: Client, message: Message):
         ]
     }
 
-    if avatar_base64:
-        payload["messages"][0]["avatar"] = avatar_base64
+    temp_sticker_path = f"sticker_{message.id}.webp"
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(QUOTLY_API, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                 if resp.status != 200:
-                    return await message.reply_text("<blockquote>❌ <b>Sticker create karne mein dikkat aayi. Baad mein prayas karein.</b></blockquote>")
-                sticker_bytes = await resp.read()
+                    return await message.reply_text("<blockquote>❌ <b>Quotly server se sticker generate nahi ho paya.</b></blockquote>")
+                sticker_data = await resp.read()
 
-        sticker_io = io.BytesIO(sticker_bytes)
-        sticker_io.name = "sticker.webp"
-        sticker_io.seek(0)
+        # Local storage me temporarily write karein
+        with open(temp_sticker_path, "wb") as f:
+            f.write(sticker_data)
 
-        # Direct as sticker bhejna (document format nahi banega)
-        await message.reply_sticker(sticker=sticker_io)
+        # Local path se send karne par Telegram isko strictly "Sticker" hi render karega
+        await client.send_sticker(
+            chat_id=message.chat.id,
+            sticker=temp_sticker_path,
+            reply_to_message_id=reply.id
+        )
 
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Error:</b> <code>{e}</code></blockquote>")
-        
+    finally:
+        # File delete karke space clean karein
+        if os.path.exists(temp_sticker_path):
+            os.remove(temp_sticker_path)
+            
