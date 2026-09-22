@@ -29,7 +29,6 @@ def get_target(message):
 def clean_txt(text: str) -> str:
     return re.sub(r'[*_`\[\]()]', '', text or "User")
 
-# Standard empty privileges for clean demote
 DEMOTE_PRIVILEGES = ChatPrivileges(
     can_manage_chat=False,
     can_delete_messages=False,
@@ -40,7 +39,7 @@ DEMOTE_PRIVILEGES = ChatPrivileges(
     can_promote_members=False
 )
 
-# ==================== PROMOTE COMMAND ====================
+# ==================== PROMOTE ====================
 @Client.on_message(filters.command("promote", prefixes=[".", "/"]) & filters.group)
 async def promote_cmd(client, message):
     if not message.from_user or not await is_authorized(client, message.from_user.id, message.chat.id):
@@ -48,7 +47,7 @@ async def promote_cmd(client, message):
 
     target = get_target(message)
     if not target:
-        return await message.reply_text("⚠️ Kisi ke message par reply karke `.promote <title>` likhein.")
+        return await message.reply_text("> ⚠️ **Kisi ke message par reply karke `.promote <title>` likhein.**")
 
     parts = message.text.split(maxsplit=1)
     title = parts[1][:16] if len(parts) > 1 else "Admin"
@@ -76,14 +75,13 @@ async def promote_cmd(client, message):
         target_name = clean_txt(target.first_name)
 
         text = (
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "✨ 𝙥𝙧𝙤𝙢𝙤𝙩𝙚 𝙚𝙫𝙚𝙣𝙩 ✨\n"
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
-            f"👤 **User:** [{target_name}](tg://user?id={target.id})\n"
-            f"🆔 **User ID:** `{target.id}`\n"
-            f"🏷️ **Custom Title:** `{title}`\n"
-            f"👑 **Promoted By:** [{admin_name}](tg://user?id={message.from_user.id})\n"
-            f"⚡ **Status:** Successfully Promoted!"
+            "> ✨ **𝙥𝙧𝙤𝙢𝙤𝙩𝙚 𝙚𝙫𝙚𝙣𝙩** ✨\n"
+            "> ✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"> 👤 **User:** [{target_name}](tg://user?id={target.id})\n"
+            f"> 🆔 **User ID:** `{target.id}`\n"
+            f"> 🏷️ **Custom Title:** `{title}`\n"
+            f"> 👑 **Promoted By:** [{admin_name}](tg://user?id={message.from_user.id})\n"
+            "> ⚡ **Status:** Successfully Promoted!"
         )
 
         keyboard = InlineKeyboardMarkup([
@@ -92,9 +90,9 @@ async def promote_cmd(client, message):
 
         await message.reply_text(text=text, reply_markup=keyboard)
     except Exception as e:
-        await message.reply_text(f"❌ Promote error: `{e}`")
+        await message.reply_text(f"> ❌ **Promote error:** `{e}`")
 
-# ==================== DEMOTE COMMAND ====================
+# ==================== DEMOTE ====================
 @Client.on_message(filters.command("demote", prefixes=[".", "/"]) & filters.group)
 async def demote_cmd(client, message):
     if not message.from_user or not await is_authorized(client, message.from_user.id, message.chat.id):
@@ -102,7 +100,7 @@ async def demote_cmd(client, message):
 
     target = get_target(message)
     if not target:
-        return await message.reply_text("⚠️ Kisi admin ke message par reply karke `.demote` likhein.")
+        return await message.reply_text("> ⚠️ **Kisi admin ke message par reply karke `.demote` likhein.**")
 
     try:
         await client.promote_chat_member(
@@ -114,19 +112,18 @@ async def demote_cmd(client, message):
         target_name = clean_txt(target.first_name)
 
         text = (
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "📉 𝙙𝙚𝙢𝙤𝙩𝙚 𝙚𝙫𝙚𝙣𝙩 📉\n"
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
-            f"👤 **User:** [{target_name}](tg://user?id={target.id})\n"
-            f"🆔 **User ID:** `{target.id}`\n"
-            f"👮 **Demoted By:** [{admin_name}](tg://user?id={message.from_user.id})\n"
-            f"⚡ **Status:** Admin Rights Removed!"
+            "> 📉 **𝙙𝙚𝙢𝙤𝙩𝙚 𝙚𝙫𝙚𝙣𝙩** 📉\n"
+            "> ✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"> 👤 **User:** [{target_name}](tg://user?id={target.id})\n"
+            f"> 🆔 **User ID:** `{target.id}`\n"
+            f"> 👮 **Demoted By:** [{admin_name}](tg://user?id={message.from_user.id})\n"
+            "> ⚡ **Status:** Admin Rights Removed!"
         )
         await message.reply_text(text=text)
     except Exception as e:
-        await message.reply_text(f"❌ Demote error: `{e}`")
+        await message.reply_text(f"> ❌ **Demote error:** `{e}`")
 
-# ==================== MUTE COMMAND ====================
+# ==================== MUTE ====================
 @Client.on_message(filters.command("mute", prefixes=[".", "/"]) & filters.group)
 async def mute_cmd(client, message):
     if not message.from_user or not await is_authorized(client, message.from_user.id, message.chat.id):
@@ -134,7 +131,7 @@ async def mute_cmd(client, message):
 
     target = get_target(message)
     if not target:
-        return await message.reply_text("⚠️ Kisi user ke message par reply karke `.mute` likhein.")
+        return await message.reply_text("> ⚠️ **Kisi user ke message par reply karke `.mute` likhein.**")
 
     try:
         await client.restrict_chat_member(
@@ -146,13 +143,12 @@ async def mute_cmd(client, message):
         target_name = clean_txt(target.first_name)
 
         text = (
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "🔇 𝙢𝙪𝙩𝙚 𝙚𝙫𝙚𝙣𝙩 🔇\n"
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
-            f"👤 **User:** [{target_name}](tg://user?id={target.id})\n"
-            f"🆔 **User ID:** `{target.id}`\n"
-            f"👮 **Muted By:** [{admin_name}](tg://user?id={message.from_user.id})\n"
-            f"⚡ **Status:** Muted indefinitely!"
+            "> 🔇 **𝙢𝙪𝙩𝙚 𝙚𝙫𝙚𝙣𝙩** 🔇\n"
+            "> ✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"> 👤 **User:** [{target_name}](tg://user?id={target.id})\n"
+            f"> 🆔 **User ID:** `{target.id}`\n"
+            f"> 👮 **Muted By:** [{admin_name}](tg://user?id={message.from_user.id})\n"
+            "> ⚡ **Status:** Muted indefinitely!"
         )
 
         keyboard = InlineKeyboardMarkup([
@@ -161,9 +157,9 @@ async def mute_cmd(client, message):
 
         await message.reply_text(text=text, reply_markup=keyboard)
     except Exception as e:
-        await message.reply_text(f"❌ Mute error: `{e}`")
+        await message.reply_text(f"> ❌ **Mute error:** `{e}`")
 
-# ==================== UNMUTE COMMAND ====================
+# ==================== UNMUTE ====================
 @Client.on_message(filters.command("unmute", prefixes=[".", "/"]) & filters.group)
 async def unmute_cmd(client, message):
     if not message.from_user or not await is_authorized(client, message.from_user.id, message.chat.id):
@@ -171,7 +167,7 @@ async def unmute_cmd(client, message):
 
     target = get_target(message)
     if not target:
-        return await message.reply_text("⚠️ Kisi user ke message par reply karke `.unmute` likhein.")
+        return await message.reply_text("> ⚠️ **Kisi user ke message par reply karke `.unmute` likhein.**")
 
     try:
         await client.restrict_chat_member(
@@ -188,17 +184,16 @@ async def unmute_cmd(client, message):
         target_name = clean_txt(target.first_name)
 
         text = (
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "🔊 𝙪𝙣𝙢𝙪𝙩𝙚 𝙚𝙫𝙚𝙣𝙩 🔊\n"
-            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
-            f"👤 **User:** [{target_name}](tg://user?id={target.id})\n"
-            f"🆔 **User ID:** `{target.id}`\n"
-            f"👮 **Unmuted By:** [{admin_name}](tg://user?id={message.from_user.id})\n"
-            f"⚡ **Status:** Successfully Unmuted!"
+            "> 🔊 **𝙪𝙣𝙢𝙪𝙩𝙚 𝙚𝙫𝙚𝙣𝙩** 🔊\n"
+            "> ✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"> 👤 **User:** [{target_name}](tg://user?id={target.id})\n"
+            f"> 🆔 **User ID:** `{target.id}`\n"
+            f"> 👮 **Unmuted By:** [{admin_name}](tg://user?id={message.from_user.id})\n"
+            "> ⚡ **Status:** Successfully Unmuted!"
         )
         await message.reply_text(text=text)
     except Exception as e:
-        await message.reply_text(f"❌ Unmute error: `{e}`")
+        await message.reply_text(f"> ❌ **Unmute error:** `{e}`")
 
 # ==================== BAN & KICK ====================
 @Client.on_message(filters.command("ban", prefixes=[".", "/"]) & filters.group)
@@ -207,13 +202,13 @@ async def ban_cmd(client, message):
         return
     target = get_target(message)
     if not target:
-        return await message.reply_text("⚠️ Kisi user ke message par reply karke `.ban` likhein.")
+        return await message.reply_text("> ⚠️ **Kisi user ke message par reply karke `.ban` likhein.**")
     try:
         await client.ban_chat_member(message.chat.id, target.id)
         target_name = clean_txt(target.first_name)
-        await message.reply_text(f"🚫 [{target_name}](tg://user?id={target.id}) ko permanently **BAN** kar diya gaya!")
+        await message.reply_text(f"> 🚫 [{target_name}](tg://user?id={target.id}) ko permanently **BAN** kar diya gaya!")
     except Exception as e:
-        await message.reply_text(f"❌ Ban error: `{e}`")
+        await message.reply_text(f"> ❌ **Ban error:** `{e}`")
 
 @Client.on_message(filters.command("kick", prefixes=[".", "/"]) & filters.group)
 async def kick_cmd(client, message):
@@ -221,14 +216,14 @@ async def kick_cmd(client, message):
         return
     target = get_target(message)
     if not target:
-        return await message.reply_text("⚠️ Kisi user ke message par reply karke `.kick` likhein.")
+        return await message.reply_text("> ⚠️ **Kisi user ke message par reply karke `.kick` likhein.**")
     try:
         await client.ban_chat_member(message.chat.id, target.id)
         await client.unban_chat_member(message.chat.id, target.id)
         target_name = clean_txt(target.first_name)
-        await message.reply_text(f"👢 [{target_name}](tg://user?id={target.id}) ko **KICK** kar diya gaya!")
+        await message.reply_text(f"> 👢 [{target_name}](tg://user?id={target.id}) ko **KICK** kar diya gaya!")
     except Exception as e:
-        await message.reply_text(f"❌ Kick error: `{e}`")
+        await message.reply_text(f"> ❌ **Kick error:** `{e}`")
 
 # ==================== BUTTON CALLBACKS ====================
 @Client.on_callback_query(filters.regex(r"^(demote|unmute|mute)_(\d+)_(\d+)$"))
@@ -257,13 +252,12 @@ async def admin_buttons_callback(client, query: CallbackQuery):
                 privileges=DEMOTE_PRIVILEGES
             )
             updated_text = (
-                "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-                "📉 𝙙𝙚𝙢𝙤𝙩𝙚 𝙚𝙫𝙚𝙣𝙩 📉\n"
-                "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
-                f"👤 **User:** [{target_name}](tg://user?id={target_id})\n"
-                f"🆔 **User ID:** `{target_id}`\n"
-                f"👮 **Demoted By:** [{caller_name}](tg://user?id={caller_id})\n"
-                f"⚡ **Status:** Demoted via Quick Button!"
+                "> 📉 **𝙙𝙚𝙢𝙤𝙩𝙚 𝙚𝙫𝙚𝙣𝙩** 📉\n"
+                "> ✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+                f"> 👤 **User:** [{target_name}](tg://user?id={target_id})\n"
+                f"> 🆔 **User ID:** `{target_id}`\n"
+                f"> 👮 **Demoted By:** [{caller_name}](tg://user?id={caller_id})\n"
+                "> ⚡ **Status:** Demoted via Quick Button!"
             )
             await query.message.edit_text(text=updated_text, reply_markup=None)
             await query.answer("✅ User ko demote kar diya gaya!")
@@ -283,13 +277,12 @@ async def admin_buttons_callback(client, query: CallbackQuery):
                 )
             )
             updated_text = (
-                "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-                "🔊 𝙪𝙣𝙢𝙪𝙩𝙚 𝙚𝙫𝙚𝙣𝙩 🔊\n"
-                "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
-                f"👤 **User:** [{target_name}](tg://user?id={target_id})\n"
-                f"🆔 **User ID:** `{target_id}`\n"
-                f"👮 **Unmuted By:** [{caller_name}](tg://user?id={caller_id})\n"
-                f"⚡ **Status:** Unmuted via Quick Button!"
+                "> 🔊 **𝙪𝙣𝙢𝙪𝙩𝙚 𝙚𝙫𝙚𝙣𝙩** 🔊\n"
+                "> ✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+                f"> 👤 **User:** [{target_name}](tg://user?id={target_id})\n"
+                f"> 🆔 **User ID:** `{target_id}`\n"
+                f"> 👮 **Unmuted By:** [{caller_name}](tg://user?id={caller_id})\n"
+                "> ⚡ **Status:** Unmuted via Quick Button!"
             )
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔇 Mute Again", callback_data=f"mute_{target_id}_{caller_id}")]
@@ -307,13 +300,12 @@ async def admin_buttons_callback(client, query: CallbackQuery):
                 permissions=ChatPermissions(can_send_messages=False)
             )
             updated_text = (
-                "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-                "🔇 𝙢𝙪𝙩𝙚 𝙚𝙫𝙚𝙣𝙩 🔇\n"
-                "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
-                f"👤 **User:** [{target_name}](tg://user?id={target_id})\n"
-                f"🆔 **User ID:** `{target_id}`\n"
-                f"👮 **Muted By:** [{caller_name}](tg://user?id={caller_id})\n"
-                f"⚡ **Status:** Muted via Quick Button!"
+                "> 🔇 **𝙢𝙪𝙩𝙚 𝙚𝙫𝙚𝙣𝙩** 🔇\n"
+                "> ✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+                f"> 👤 **User:** [{target_name}](tg://user?id={target_id})\n"
+                f"> 🆔 **User ID:** `{target_id}`\n"
+                f"> 👮 **Muted By:** [{caller_name}](tg://user?id={caller_id})\n"
+                "> ⚡ **Status:** Muted via Quick Button!"
             )
             keyboard = InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔊 Unmute User", callback_data=f"unmute_{target_id}_{caller_id}")]
