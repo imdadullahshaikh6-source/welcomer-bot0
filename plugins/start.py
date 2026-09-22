@@ -2,13 +2,24 @@ from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 
+def colored_button(text: str, callback_data: str = None, url: str = None, style: str = "primary"):
+    kwargs = {"text": text}
+    if callback_data:
+        kwargs["callback_data"] = callback_data
+    if url:
+        kwargs["url"] = url
+    try:
+        return InlineKeyboardButton(**kwargs, style=style)
+    except TypeError:
+        return InlineKeyboardButton(**kwargs)
+
 START_TEXT = """<blockquote>👑 <b>Hello {mention}</b>
 
 Main aapka <b>All-in-One Group Manager Bot</b> hoon.
 Groups ko manage karne, custom greetings dene,
 aur chat environment ko smooth rakhne ke liye tayar hoon!
 
-Niche diye gaye buttons par click karke features check karein:</blockquote>"""
+Niche diye gaye colored buttons se features explore karein:</blockquote>"""
 
 ADMIN_TEXT = """<blockquote>🛡️ <b>Admin Commands & Features:</b>
 
@@ -21,33 +32,30 @@ ADMIN_TEXT = """<blockquote>🛡️ <b>Admin Commands & Features:</b>
 
 PIN_TEXT = """<blockquote>📌 <b>Pin & Unpin Management:</b>
 
-• <code>.pin</code> - Reply kiye message ko silently pin karein (with Quick Unpin Button)
+• <code>.pin</code> - Reply kiye message ko silently pin karein
 • <code>.pin loud</code> - Message pin karein alert notification ke sath
 • <code>.unpin</code> - Pinned message par reply karke unpin karein
 • <code>.unpinall</code> - Chat ke saare pinned messages clear karein</blockquote>"""
 
 GREETINGS_TEXT = """<blockquote>🎉 <b>Greetings / Welcome System:</b>
 
-• <code>.setwelcome &lt;text&gt;</code> - Custom welcome message set karein (ya reply karke).
-• <code>.welcome on/off</code> - Greetings enable ya disable karein.
-• <code>.getwelcome</code> - Current set welcome message check karein.
+• <code>.setwelcome &lt;text&gt;</code> - Custom welcome set karein (Photo, Video & Buttons support).
+• <code>.welcome on/off</code> - Greetings toggle karein.
+• <code>.getwelcome</code> - Current welcome template check karein.
 • <code>.resetwelcome</code> - Default template par reset karein.
 
-<b>Available Tags:</b>
-<code>{mention}</code>, <code>{name}</code>, <code>{chat}</code>, <code>{id}</code></blockquote>"""
+<b>Tags:</b> <code>{mention}</code>, <code>{first}</code>, <code>{username}</code>, <code>{chat}</code>, <code>{id}</code></blockquote>"""
 
 QUOTE_TEXT = """<blockquote>🎨 <b>Quotly Sticker Generator:</b>
 
 • <code>.q</code> ya <code>/q</code> - Kisi bhi text message par reply karke stylish Quotly sticker banayein!
-• Sender ka profile avatar, name aur message ek round sticker ban jayega.
-• Group ka koi bhi member is feature ka use kar sakta hai.</blockquote>"""
+• Sender ka profile avatar, name aur message ek round sticker ban jayega.</blockquote>"""
 
 AFK_TEXT = """<blockquote>💤 <b>AFK (Away From Keyboard) System:</b>
 
 • <code>.afk &lt;reason&gt;</code> - AFK status set karein
 • Group ke sabhi members ke liye fully functional
-• Mention ya reply karne par bot instant notice dega
-• Wapas aane par automatically disable ho jayega</blockquote>"""
+• Mention ya reply karne par bot instant notice dega</blockquote>"""
 
 REQUEST_TEXT = """<blockquote>📥 <b>Auto Request Accept System:</b>
 
@@ -58,24 +66,24 @@ REQUEST_TEXT = """<blockquote>📥 <b>Auto Request Accept System:</b>
 def start_keyboard(bot_username: str):
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🛡️ Admin Features", callback_data="help_admin"),
-            InlineKeyboardButton("📌 Pin System", callback_data="help_pin")
+            colored_button("🔴 Admin Features", callback_data="help_admin", style="danger"),
+            colored_button("🔵 Pin System", callback_data="help_pin", style="primary")
         ],
         [
-            InlineKeyboardButton("🎉 Greetings", callback_data="help_greetings"),
-            InlineKeyboardButton("🎨 Quote Sticker", callback_data="help_quote")
+            colored_button("🟢 Greetings", callback_data="help_greetings", style="success"),
+            colored_button("🔵 Quote Sticker", callback_data="help_quote", style="primary")
         ],
         [
-            InlineKeyboardButton("💤 AFK System", callback_data="help_afk"),
-            InlineKeyboardButton("📥 Request Accept", callback_data="help_request")
+            colored_button("🔵 AFK System", callback_data="help_afk", style="primary"),
+            colored_button("🟢 Request Accept", callback_data="help_request", style="success")
         ],
         [
-            InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_username}?startgroup=true")
+            colored_button("🔵 Add Me To Your Group", url=f"https://t.me/{bot_username}?startgroup=true", style="primary")
         ]
     ])
 
 BACK_KEYBOARD = InlineKeyboardMarkup([
-    [InlineKeyboardButton("« Back", callback_data="help_back")]
+    [colored_button("« Back", callback_data="help_back", style="primary")]
 ])
 
 # ==================== PRIVATE /start ====================
@@ -89,7 +97,7 @@ async def private_start(client: Client, message: Message):
         parse_mode=ParseMode.HTML
     )
 
-# ==================== GROUP .start /start INTRO ====================
+# ==================== GROUP INTRO ====================
 @Client.on_message(filters.command("start", prefixes=[".", "/"]) & filters.group)
 async def group_start_intro(client: Client, message: Message):
     bot = await client.get_me()
@@ -101,19 +109,19 @@ async def group_start_intro(client: Client, message: Message):
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"Main <b>{bot.first_name}</b> hoon, ek modern group management bot!\n\n"
         "⚡ <b>Quick Features:</b>\n"
-        "• 🛡️ <i>Admin Control (.promote, .demote, .mute, .ban, .kick)</i>\n"
-        "• 📌 <i>Pin Management (.pin, .unpin, .unpinall)</i>\n"
-        "• 🎉 <i>Custom Greetings (.setwelcome, .welcome on/off)</i>\n"
-        "• 🎨 <i>Quote Stickers (.q text par reply)</i>\n"
-        "• 💤 <i>AFK System (.afk reason)</i>\n"
-        "• 📥 <i>Auto Request Accept (.requestaccept on/off)</i>\n\n"
+        "• 🛡️ <i>Admin Control (.promote, .demote, .mute, .ban)</i>\n"
+        "• 📌 <i>Pin Management (.pin, .unpin)</i>\n"
+        "• 🎉 <i>Custom Greetings (.setwelcome)</i>\n"
+        "• 🎨 <i>Quote Stickers (.q)</i>\n"
+        "• 💤 <i>AFK System (.afk)</i>\n"
+        "• 📥 <i>Auto Request Accept (.requestaccept)</i>\n\n"
         "Features dekhne ke liye niche DM button dabayein.</blockquote>"
     ).format(user_mention=user_mention)
 
     group_keyboard = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("💬 Help & Features (PM)", url=f"https://t.me/{bot.username}?start=help"),
-            InlineKeyboardButton("➕ Add Me", url=f"https://t.me/{bot.username}?startgroup=true")
+            colored_button("🔵 Help & Features (PM)", url=f"https://t.me/{bot.username}?start=help", style="primary"),
+            colored_button("🟢 Add Me", url=f"https://t.me/{bot.username}?startgroup=true", style="success")
         ]
     ])
 
