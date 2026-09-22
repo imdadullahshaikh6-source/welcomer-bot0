@@ -1,6 +1,6 @@
 import os
 import sys
-from pyrogram import Client
+from pyrogram import Client, idle
 
 API_ID = int(os.environ.get("API_ID", 0))
 API_HASH = os.environ.get("API_HASH", "")
@@ -11,15 +11,20 @@ if not BOT_TOKEN or not API_ID or not API_HASH:
     sys.exit(1)
 
 app = Client(
-    name="bot_session",
+    "itachi_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN,
-    in_memory=True,
     plugins=dict(root="plugins")
 )
 
+async def main():
+    await app.start()
+    bot_info = await app.get_me()
+    print(f"Bot successfully started as @{bot_info.username}!")
+    await idle()
+    await app.stop()
+
 if __name__ == "__main__":
-    print("Starting Official Bot...")
-    app.run()
+    app.run(main())
     
