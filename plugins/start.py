@@ -39,12 +39,12 @@ AFK_TEXT = """<blockquote>💤 <b>AFK (Away From Keyboard) System:</b>
 • Mention ya reply karne par bot instant notice dega
 • Wapas aane par automatically disable ho jayega</blockquote>"""
 
-WELCOMER_TEXT = """<blockquote>✨ <b>Join Welcomer & Automation:</b>
+REQUEST_TEXT = """<blockquote>📥 <b>Auto Request Accept System:</b>
 
-• Pending join requests approval system
-• New users ke aane par aesthetic welcome message
-• <code>.uthao</code> - Jama hui pending join requests ko approve karein
-• <code>.ruko</code> - Approval process ko turant pause karein</blockquote>"""
+• Nayi aane wali join requests ka auto-approval system.
+• <code>.requestaccept on</code> - Auto accept chalu karein.
+• <code>.requestaccept off</code> - Auto accept band karein.
+• Group admins ke liye fully restricted aur secure.</blockquote>"""
 
 def start_keyboard(bot_username: str):
     return InlineKeyboardMarkup([
@@ -57,7 +57,7 @@ def start_keyboard(bot_username: str):
             InlineKeyboardButton("💤 AFK System", callback_data="help_afk")
         ],
         [
-            InlineKeyboardButton("✨ Join Welcomer", callback_data="help_welcomer")
+            InlineKeyboardButton("📥 Request Accept", callback_data="help_request")
         ],
         [
             InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_username}?startgroup=true")
@@ -95,7 +95,7 @@ async def group_start_intro(client: Client, message: Message):
         "• 📌 <i>Pin Management (.pin, .unpin, .unpinall)</i>\n"
         "• 🎨 <i>Quote Stickers (.q text message par reply)</i>\n"
         "• 💤 <i>AFK System (.afk reason)</i>\n"
-        "• ✨ <i>Pending Requests Approval (.uthao, .ruko)</i>\n\n"
+        "• 📥 <i>Auto Request Accept (.requestaccept on/off)</i>\n\n"
         "Mere commands aur setup dekhne ke liye niche DM button dabayein.</blockquote>"
     ).format(user_mention=user_mention)
 
@@ -128,8 +128,8 @@ async def callback_handler(client: Client, query: CallbackQuery):
         await query.message.edit_text(text=QUOTE_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_afk":
         await query.message.edit_text(text=AFK_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
-    elif data == "help_welcomer":
-        await query.message.edit_text(text=WELCOMER_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
+    elif data == "help_request":
+        await query.message.edit_text(text=REQUEST_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_back":
         await query.message.edit_text(
             text=START_TEXT.format(mention=mention),
