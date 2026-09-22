@@ -34,6 +34,18 @@ DEMOTE_PRIVILEGES = ChatPrivileges(
     can_promote_members=False
 )
 
+# Helper for colored button creation
+def colored_button(text: str, callback_data: str = None, url: str = None, style: str = "primary"):
+    kwargs = {"text": text}
+    if callback_data:
+        kwargs["callback_data"] = callback_data
+    if url:
+        kwargs["url"] = url
+    try:
+        return InlineKeyboardButton(**kwargs, style=style)
+    except TypeError:
+        return InlineKeyboardButton(**kwargs)
+
 # ==================== PROMOTE ====================
 @Client.on_message(filters.command("promote", prefixes=[".", "/"]) & filters.group)
 async def promote_cmd(client: Client, message: Message):
@@ -80,7 +92,7 @@ async def promote_cmd(client: Client, message: Message):
         )
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📉 Demote User", callback_data=f"demote_{target.id}")]
+            [colored_button("🔴 Demote User", callback_data=f"demote_{target.id}", style="danger")]
         ])
 
         await message.reply_text(text=text, reply_markup=keyboard)
@@ -150,7 +162,7 @@ async def pin_cmd(client: Client, message: Message):
         )
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📍 Unpin Message", callback_data=f"unpinmsg_{message.reply_to_message.id}")]
+            [colored_button("🔴 Unpin Message", callback_data=f"unpinmsg_{message.reply_to_message.id}", style="danger")]
         ])
 
         await message.reply_text(text=text, reply_markup=keyboard)
@@ -228,7 +240,7 @@ async def mute_cmd(client: Client, message: Message):
         )
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔊 Unmute User", callback_data=f"unmute_{target.id}")]
+            [colored_button("🟢 Unmute User", callback_data=f"unmute_{target.id}", style="success")]
         ])
 
         await message.reply_text(text=text, reply_markup=keyboard)
@@ -300,14 +312,13 @@ async def kick_cmd(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Kick error:</b> <code>{e}</code></blockquote>")
 
-# ==================== BUTTON CALLBACKS (ANY ADMIN) ====================
+# ==================== BUTTON CALLBACKS ====================
 @Client.on_callback_query(filters.regex(r"^(demote|unmute|mute|unpinmsg)_(\d+)$"))
 async def admin_buttons_callback(client: Client, query: CallbackQuery):
     action, target_id = query.data.split("_")
     target_id = int(target_id)
     caller_id = query.from_user.id
 
-    # Group ke kisi bhi admin ko permission
     if not await is_admin(client, caller_id, query.message.chat.id):
         return await query.answer("❌ Yeh button sirf Group Admins ke liye hai!", show_alert=True)
 
@@ -380,7 +391,7 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
                 "⚡ <b>Status:</b> Successfully Unmuted!</blockquote>"
             )
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔇 Mute Again", callback_data=f"mute_{target_id}")]
+                [colored_button("🔴 Mute Again", callback_data=f"mute_{target_id}", style="danger")]
             ])
             await query.message.edit_text(text=updated_text, reply_markup=keyboard)
             await query.answer("✅ User unmuted!")
@@ -409,10 +420,10 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
                 "⚡ <b>Status:</b> Muted via Quick Button!</blockquote>"
             )
             keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔊 Unmute User", callback_data=f"unmute_{target_id}")]
+                [colored_button("🟢 Unmute User", callback_data=f"unmute_{target_id}", style="success")]
             ])
             await query.message.edit_text(text=updated_text, reply_markup=keyboard)
             await query.answer("✅ User muted again!")
         except Exception as e:
             await query.answer(f"Mute failed: {e}", show_alert=True)
-        
+    
