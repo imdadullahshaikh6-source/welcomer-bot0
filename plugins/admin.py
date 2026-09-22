@@ -19,14 +19,14 @@ async def get_admin_privileges(client: Client, user_id: int, chat_id: int):
         return False, None
 
 async def extract_target_user(client: Client, message: Message):
-    # 1. Check if replied
+    # 1. Reply se extract karein
     if message.reply_to_message:
         if message.reply_to_message.from_user:
             return message.reply_to_message.from_user
         elif message.reply_to_message.sender_chat:
             return message.reply_to_message.sender_chat
 
-    # 2. Check for text mention entity (.warn Noor)
+    # 2. Text mention se extract karein
     if message.entities:
         for ent in message.entities:
             if ent.type == MessageEntityType.TEXT_MENTION and ent.user:
@@ -38,7 +38,7 @@ async def extract_target_user(client: Client, message: Message):
                 except Exception:
                     pass
 
-    # 3. Check for raw ID / Username token
+    # 3. ID ya username token se extract karein
     parts = message.text.split(maxsplit=2)
     if len(parts) > 1:
         arg = parts[1].strip()
@@ -348,7 +348,7 @@ async def warn_command(client: Client, message: Message):
                 parse_mode=ParseMode.HTML
             )
         except Exception as e:
-            return await message.reply_text(f"<blockquote>⚠️ Ban failed: <code>{e}</code></blockquote>")
+            return await message.reply_text(f"<blockquote>⚠️ Ban failed: <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
 
     btn = InlineKeyboardMarkup([[
         InlineKeyboardButton("🎀 Remove Warn (Admin Only)", callback_data=f"adm_rmwarn_{target.id}")
@@ -453,5 +453,4 @@ async def promote_command(client: Client, message: Message):
     parts = message.text.split(maxsplit=2)
     custom_title = "Admin"
     if message.reply_to_message and len(parts) > 1:
-        custom_title = parts[1]
-    elif len(
+    
