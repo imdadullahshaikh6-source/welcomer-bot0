@@ -5,7 +5,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQ
 START_TEXT = """<blockquote>👑 <b>Hello {mention}</b>
 
 Main aapka <b>All-in-One Group Manager Bot</b> hoon.
-Groups ko manage karne, join requests handle karne,
+Groups ko manage karne, custom greetings dene,
 aur chat environment ko smooth rakhne ke liye tayar hoon!
 
 Niche diye gaye buttons par click karke features check karein:</blockquote>"""
@@ -26,6 +26,16 @@ PIN_TEXT = """<blockquote>📌 <b>Pin & Unpin Management:</b>
 • <code>.unpin</code> - Pinned message par reply karke unpin karein
 • <code>.unpinall</code> - Chat ke saare pinned messages clear karein</blockquote>"""
 
+GREETINGS_TEXT = """<blockquote>🎉 <b>Greetings / Welcome System:</b>
+
+• <code>.setwelcome &lt;text&gt;</code> - Custom welcome message set karein (ya reply karke).
+• <code>.welcome on/off</code> - Greetings enable ya disable karein.
+• <code>.getwelcome</code> - Current set welcome message check karein.
+• <code>.resetwelcome</code> - Default template par reset karein.
+
+<b>Available Tags:</b>
+<code>{mention}</code>, <code>{name}</code>, <code>{chat}</code>, <code>{id}</code></blockquote>"""
+
 QUOTE_TEXT = """<blockquote>🎨 <b>Quotly Sticker Generator:</b>
 
 • <code>.q</code> ya <code>/q</code> - Kisi bhi text message par reply karke stylish Quotly sticker banayein!
@@ -43,8 +53,7 @@ REQUEST_TEXT = """<blockquote>📥 <b>Auto Request Accept System:</b>
 
 • Nayi aane wali join requests ka auto-approval system.
 • <code>.requestaccept on</code> - Auto accept chalu karein.
-• <code>.requestaccept off</code> - Auto accept band karein.
-• Group admins ke liye fully restricted aur secure.</blockquote>"""
+• <code>.requestaccept off</code> - Auto accept band karein.</blockquote>"""
 
 def start_keyboard(bot_username: str):
     return InlineKeyboardMarkup([
@@ -53,10 +62,11 @@ def start_keyboard(bot_username: str):
             InlineKeyboardButton("📌 Pin System", callback_data="help_pin")
         ],
         [
-            InlineKeyboardButton("🎨 Quote Sticker", callback_data="help_quote"),
-            InlineKeyboardButton("💤 AFK System", callback_data="help_afk")
+            InlineKeyboardButton("🎉 Greetings", callback_data="help_greetings"),
+            InlineKeyboardButton("🎨 Quote Sticker", callback_data="help_quote")
         ],
         [
+            InlineKeyboardButton("💤 AFK System", callback_data="help_afk"),
             InlineKeyboardButton("📥 Request Accept", callback_data="help_request")
         ],
         [
@@ -93,10 +103,11 @@ async def group_start_intro(client: Client, message: Message):
         "⚡ <b>Quick Features:</b>\n"
         "• 🛡️ <i>Admin Control (.promote, .demote, .mute, .ban, .kick)</i>\n"
         "• 📌 <i>Pin Management (.pin, .unpin, .unpinall)</i>\n"
-        "• 🎨 <i>Quote Stickers (.q text message par reply)</i>\n"
+        "• 🎉 <i>Custom Greetings (.setwelcome, .welcome on/off)</i>\n"
+        "• 🎨 <i>Quote Stickers (.q text par reply)</i>\n"
         "• 💤 <i>AFK System (.afk reason)</i>\n"
         "• 📥 <i>Auto Request Accept (.requestaccept on/off)</i>\n\n"
-        "Mere commands aur setup dekhne ke liye niche DM button dabayein.</blockquote>"
+        "Features dekhne ke liye niche DM button dabayein.</blockquote>"
     ).format(user_mention=user_mention)
 
     group_keyboard = InlineKeyboardMarkup([
@@ -124,6 +135,8 @@ async def callback_handler(client: Client, query: CallbackQuery):
         await query.message.edit_text(text=ADMIN_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_pin":
         await query.message.edit_text(text=PIN_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
+    elif data == "help_greetings":
+        await query.message.edit_text(text=GREETINGS_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_quote":
         await query.message.edit_text(text=QUOTE_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_afk":
