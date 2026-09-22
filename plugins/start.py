@@ -11,7 +11,7 @@ SUPPORT_GROUP_URL = "https://t.me/+UCmLt1cgPhI1MjFl"
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Pure Telegram Bot API HTTP Caller jo Button Colors (style) ko support karta hai
+# Bot API HTTP Caller for styles and reaction handling
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -25,23 +25,29 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
         try:
             with urllib.request.urlopen(req, timeout=12) as resp:
                 return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as he:
-            err = he.read().decode("utf-8", errors="ignore")
-            print(f"[BotAPI HTTP {he.code}] {err}")
-            return None
-        except Exception as e:
-            print(f"[BotAPI Error] {e}")
+        except Exception:
             return None
 
     return await asyncio.to_thread(_sync)
 
-START_TEXT = (
-    "<blockquote>👑 <b>Hello {mention}!!</b>\n\n"
-    "Main aapka <b>All-in-One Group Manager Bot</b> hoon.\n"
-    "Groups ko manage karne, custom greetings dene,\n"
-    "aur chat environment ko smooth rakhne ke liye tayar hoon!\n\n"
-    f"👑 <b>OWNER:</b> @{OWNER_USERNAME}\n\n"
-    "Niche diye gaye buttons se explore karein:</blockquote>"
+# Aesthetic Zoya Intro for Private DM
+DM_START_TEXT = (
+    "<blockquote>🌸 <b>Hey {mention}!! I'm Zoya</b> 💖\n"
+    "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+    "Main aapke group ki <b>Smart & Aesthetic Manager</b> hoon!\n\n"
+    "✨ <i>Custom aesthetic welcomes</i>\n"
+    "🛡️ <i>Group protection & silent moderation</i>\n"
+    "💬 <i>Auto approvals & anti-spam vibes</i>\n\n"
+    f"👑 <b>Owner:</b> @{OWNER_USERNAME}\n\n"
+    "Niche diye buttons se explore karein:</blockquote>"
+)
+
+# Cute Zoya Intro when /start is used in Groups
+GROUP_START_TEXT = (
+    "<blockquote>✨ <b>Zoya is active here!</b> 🎀\n"
+    "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+    "Hey {mention}! Main is group ko safe aur clean rakhne ke liye tayar hoon.\n\n"
+    "⚙️ Commands aur settings ke liye mere <b>PM (DM)</b> mein check karein!</blockquote>"
 )
 
 HELP_TEXT = (
@@ -69,6 +75,18 @@ def get_start_markup(bot_username: str):
         ]
     }
 
+def get_group_markup(bot_username: str):
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "💌 Start Zoya in PM", "url": f"https://t.me/{bot_username}?start=help", "style": "success"}
+            ],
+            [
+                {"text": "💬 Support", "url": SUPPORT_GROUP_URL, "style": "success"}
+            ]
+        ]
+    }
+
 def get_commands_menu():
     return {
         "inline_keyboard": [
@@ -90,23 +108,52 @@ def get_commands_menu():
         ]
     }
 
-@Client.on_message(filters.command("start") & filters.private)
+# Handles /start in BOTH Private and Groups
+@Client.on_message(filters.command("start", prefixes=["/", "."]))
 async def start_handler(client: Client, message: Message):
+    # 1. Drop reaction on user message (Group & DM)
+    try:
+        reaction_payload = {
+            "chat_id": message.chat.id,
+            "message_id": message.id,
+            "reaction": [{"type": "emoji", "emoji": "🔥"}]
+        }
+        await call_tg_bot_api("setMessageReaction", reaction_payload)
+    except Exception:
+        pass
+
     bot = await client.get_me()
-    first_name = message.from_user.first_name or "User"
+    first_name = message.from_user.first_name or "Friend"
     mention = f"<a href='tg://user?id={message.from_user.id}'>{first_name}</a>"
-    
-    caption = START_TEXT.format(mention=mention)
-    markup = get_start_markup(bot.username)
-    
-    payload = {
-        "chat_id": message.chat.id,
-        "text": caption,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-        "reply_markup": markup
-    }
-    await call_tg_bot_api("sendMessage", payload)
+
+    # Private DM Flow
+    if message.chat.type.name == "PRIVATE":
+        caption = DM_START_TEXT.format(mention=mention)
+        markup = get_start_markup(bot.username)
+        
+        payload = {
+            "chat_id": message.chat.id,
+            "text": caption,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+            "reply_markup": markup
+        }
+        await call_tg_bot_api("sendMessage", payload)
+
+    # Group Flow
+    else:
+        caption = GROUP_START_TEXT.format(mention=mention)
+        markup = get_group_markup(bot.username)
+
+        payload = {
+            "chat_id": message.chat.id,
+            "text": caption,
+            "reply_to_message_id": message.id,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+            "reply_markup": markup
+        }
+        await call_tg_bot_api("sendMessage", payload)
 
 @Client.on_callback_query(filters.regex("^open_commands$"))
 async def commands_callback(client: Client, query: CallbackQuery):
@@ -123,9 +170,9 @@ async def commands_callback(client: Client, query: CallbackQuery):
 @Client.on_callback_query(filters.regex("^back_to_start$"))
 async def back_start_callback(client: Client, query: CallbackQuery):
     bot = await client.get_me()
-    first_name = query.from_user.first_name or "User"
+    first_name = query.from_user.first_name or "Friend"
     mention = f"<a href='tg://user?id={query.from_user.id}'>{first_name}</a>"
-    caption = START_TEXT.format(mention=mention)
+    caption = DM_START_TEXT.format(mention=mention)
     
     payload = {
         "chat_id": query.message.chat.id,
