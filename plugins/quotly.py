@@ -1,4 +1,5 @@
 import io
+import base64
 import aiohttp
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -7,17 +8,13 @@ QUOTLY_API = "https://quote.yuri.ly/generate"
 
 @Client.on_message(filters.command(["q", "quote"], prefixes=[".", "/"]) & filters.group)
 async def quotly_maker(client: Client, message: Message):
-    # Check karein ki message kisi par reply hai ya nahi
     reply = message.reply_to_message
     if not reply:
-        return await message.reply_text("> ⚠️ **Kisi user ke message par reply karke `.q` likhein.**")
+        return await message.reply_text("<blockquote>⚠️ <b>Kisi user ke text message par reply karke <code>.q</code> likhein.</b></blockquote>")
 
-    # Text check
     text = reply.text or reply.caption
     if not text:
-        return await message.reply_text("> ⚠️ **Sirf text messages ko quote sticker banaya ja sakta hai.**")
-
-    status_msg = await message.reply_text("> 🔄 **Sticker ban raha hai, thoda intezar karein...**")
+        return await message.reply_text("<blockquote>⚠️ <b>Sirf text message ka quote sticker banaya ja sakta hai.</b></blockquote>")
 
     user = reply.from_user
     if user:
@@ -31,7 +28,16 @@ async def quotly_maker(client: Client, message: Message):
         user_id = reply.sender_chat.id if reply.sender_chat else 1000
         username = ""
 
-    # Message payload tayar karein
+    # User Profile Photo fetch karne ka try karein
+    avatar_base64 = None
+    try:
+        photos = [p async for p in client.get_chat_photos(user_id, limit=1)]
+        if photos:
+            photo_file = await client.download_media(photos[0].file_id, in_memory=True)
+            avatar_base64 = base64.b64encode(photo_file.getvalue()).decode("utf-8")
+    except Exception:
+        avatar_base64 = None
+
     payload = {
         "type": "quote",
         "format": "webp",
@@ -54,27 +60,23 @@ async def quotly_maker(client: Client, message: Message):
         ]
     }
 
+    if avatar_base64:
+        payload["messages"][0]["avatar"] = avatar_base64
+
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(QUOTLY_API, json=payload) as resp:
+            async with session.post(QUOTLY_API, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                 if resp.status != 200:
-                    await status_msg.edit_text("> ❌ **Sticker create karne mein dikkat aayi. Kripya baad mein prayas karein.**")
-                    return
-                
+                    return await message.reply_text("<blockquote>❌ <b>Sticker create karne mein dikkat aayi. Baad mein prayas karein.</b></blockquote>")
                 sticker_bytes = await resp.read()
 
-        # Sticker ko memory buffer mein load karein
-        sticker_file = io.BytesIO(sticker_bytes)
-        sticker_file.name = "quote.webp"
+        sticker_io = io.BytesIO(sticker_bytes)
+        sticker_io.name = "sticker.webp"
+        sticker_io.seek(0)
 
-        # Group mein sticker send karein
-        await client.send_sticker(
-            chat_id=message.chat.id,
-            sticker=sticker_file,
-            reply_to_message_id=reply.id
-        )
-        await status_msg.delete()
+        # Direct as sticker bhejna (document format nahi banega)
+        await message.reply_sticker(sticker=sticker_io)
 
     except Exception as e:
-        await status_msg.edit_text(f"> ❌ **Error:** `{e}`")
-      
+        await message.reply_text(f"<blockquote>❌ <b>Error:</b> <code>{e}</code></blockquote>")
+        
