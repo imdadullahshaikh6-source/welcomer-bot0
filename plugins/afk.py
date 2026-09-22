@@ -27,7 +27,11 @@ async def afk_handler(client, message):
     
     AFK_USERS[user.id] = {"reason": reason, "time": time.time()}
     name = re.sub(r'[*_`\[\]()]', '', user.first_name or "User")
-    await message.reply_text(f"💤 [{name}](tg://user?id={user.id}) ab **AFK** hain!\n**Reason:** `{reason}`")
+    await message.reply_text(
+        f"> 💤 **AFK Notice**\n"
+        f"> 👤 User: [{name}](tg://user?id={user.id})\n"
+        f"> 📝 Reason: `{reason}`"
+    )
 
 @Client.on_message(filters.group, group=1)
 async def afk_watcher(client, message):
@@ -40,7 +44,11 @@ async def afk_watcher(client, message):
         data = AFK_USERS.pop(user.id)
         dur = get_readable_time(int(time.time() - data["time"]))
         name = re.sub(r'[*_`\[\]()]', '', user.first_name or "User")
-        await message.reply_text(f"👋 Welcome back [{name}](tg://user?id={user.id})! Aap **{dur}** tak AFK the.")
+        await message.reply_text(
+            f"> 👋 **Welcome Back!**\n"
+            f"> 👤 [{name}](tg://user?id={user.id}) ab online hain.\n"
+            f"> ⏳ Duration: `{dur}`"
+        )
 
     # 2. AFK user ko reply kiya
     if message.reply_to_message and message.reply_to_message.from_user:
@@ -49,7 +57,12 @@ async def afk_watcher(client, message):
             data = AFK_USERS[rep.id]
             dur = get_readable_time(int(time.time() - data["time"]))
             name = re.sub(r'[*_`\[\]()]', '', rep.first_name or "User")
-            await message.reply_text(f"⚠️ [{name}](tg://user?id={rep.id}) abhi **AFK** hain!\n**Reason:** `{data['reason']}`\n**Duration:** `{dur}`")
+            await message.reply_text(
+                f"> ⚠️ **User is Currently AFK!**\n"
+                f"> 👤 User: [{name}](tg://user?id={rep.id})\n"
+                f"> 📝 Reason: `{data['reason']}`\n"
+                f"> ⏳ Duration: `{dur}`"
+            )
             return
 
     # 3. AFK user ko tag kiya
@@ -59,6 +72,11 @@ async def afk_watcher(client, message):
                 data = AFK_USERS[ent.user.id]
                 dur = get_readable_time(int(time.time() - data["time"]))
                 name = re.sub(r'[*_`\[\]()]', '', ent.user.first_name or "User")
-                await message.reply_text(f"⚠️ [{name}](tg://user?id={ent.user.id}) abhi **AFK** hain!\n**Reason:** `{data['reason']}`\n**Duration:** `{dur}`")
+                await message.reply_text(
+                    f"> ⚠️ **User is Currently AFK!**\n"
+                    f"> 👤 User: [{name}](tg://user?id={ent.user.id})\n"
+                    f"> 📝 Reason: `{data['reason']}`\n"
+                    f"> ⏳ Duration: `{dur}`"
+                )
                 break
                 
