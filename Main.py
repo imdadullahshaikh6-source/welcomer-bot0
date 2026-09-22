@@ -3,6 +3,7 @@ import os
 import time
 from pyrogram import Client, filters, errors
 from pyrogram.enums import ChatAction
+from pyrogram.types import ChatPrivileges
 
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
@@ -31,13 +32,35 @@ def get_readable_time(seconds: int) -> str:
         return f"{m}m {s}s"
     return f"{s}s"
 
-# ==================== TEST COMMAND ====================
-# filters.me lagane se Noor ID ke khud ke messages bhi sunega
-@app.on_message(filters.command(["ping", "test"], prefixes=[".", "/"]) & (filters.group | filters.me))
-async def ping_test(client, message):
-    await message.reply_text("🏓 **PONG! Noor Userbot is Active and Working!**")
+# ==================== JOIN WELCOMER (SAFE RESOLUTION) ====================
 
-# ==================== START / STOP ====================
+async def process_requests(client, chat_id):
+    global IS_ACTIVE, TASK_RUNNING
+    if TASK_RUNNING:
+        return
+    TASK_RUNNING = True
+    try:
+        # Cache warm-up taaki PEER_ID_INVALID na aaye
+        chat = await client.get_chat(chat_id)
+        
+        async for req in client.get_chat_join_requests(chat.id):
+            if not IS_ACTIVE:
+                break
+            try:
+                await client.approve_chat_join_request(chat.id, req.user.id)
+                await client.send_chat_action(chat.id, ChatAction.TYPING)
+                await asyncio.sleep(4)
+                await client.send_message(chat.id, f"Welcome 🤗🤗 [{req.user.first_name}](tg://user?id={req.user.id})")
+                await asyncio.sleep(8)
+            except errors.FloodWait as e:
+                await asyncio.sleep(e.value)
+            except Exception as e:
+                print(f"Join approval error: {e}")
+    except Exception as e:
+        print(f"Fetch error handled: {e}")
+    finally:
+        TASK_RUNNING = False
+
 @app.on_message(filters.command(["start", "stop"], prefixes=[".", "/"]) & (filters.group | filters.me))
 async def start_stop(client, message):
     global IS_ACTIVE
@@ -50,29 +73,21 @@ async def start_stop(client, message):
         IS_ACTIVE = False
         await message.reply_text("🛑 **Welcomer Bot STOP ho gaya!**")
 
-async def process_requests(client, chat_id):
-    global IS_ACTIVE, TASK_RUNNING
-    if TASK_RUNNING:
+@app.on_chat_join_request()
+async def live_join(client, request):
+    global IS_ACTIVE
+    if not IS_ACTIVE:
         return
-    TASK_RUNNING = True
     try:
-        async for req in client.get_chat_join_requests(chat_id):
-            if not IS_ACTIVE:
-                break
-            try:
-                await client.approve_chat_join_request(chat_id, req.user.id)
-                await client.send_chat_action(chat_id, ChatAction.TYPING)
-                await asyncio.sleep(4)
-                await client.send_message(chat_id, f"Welcome 🤗🤗 [{req.user.first_name}](tg://user?id={req.user.id})")
-                await asyncio.sleep(8)
-            except Exception as e:
-                print(f"Join error: {e}")
+        await client.approve_chat_join_request(request.chat.id, request.from_user.id)
+        await client.send_chat_action(request.chat.id, ChatAction.TYPING)
+        await asyncio.sleep(4)
+        await client.send_message(request.chat.id, f"Welcome 🤗🤗 [{request.from_user.first_name}](tg://user?id={request.from_user.id})")
     except Exception as e:
-        print(f"Fetch error: {e}")
-    finally:
-        TASK_RUNNING = False
+        print(f"Live join error: {e}")
 
 # ==================== AFK SYSTEM ====================
+
 @app.on_message(filters.command("afk", prefixes=[".", "/"]) & (filters.group | filters.me))
 async def afk_handler(client, message):
     user = message.from_user
@@ -103,6 +118,53 @@ async def afk_detect(client, message):
             data = AFK_USERS[rep.id]
             dur = get_readable_time(int(time.time() - data["time"]))
             await message.reply_text(f"⚠️ [{rep.first_name}](tg://user?id={rep.id}) abhi **AFK** hain!\n**Reason:** `{data['reason']}`\n**Duration:** `{dur}`")
+
+# ==================== PROMOTE / DEMOTE (CRASH-PROOF) ====================
+
+@app.on_message(filters.command("promote", prefixes=[".", "/"]) & (filters.group | filters.me))
+async def promote_handler(client, message):
+    target = message.reply_to_message.from_user if message.reply_to_message else None
+    if not target:
+        return await message.reply_text("⚠️ Kisi user ke message par reply karke `.promote <title>` likhein.")
+    
+    title = message.text.split(None, 1)[1][:16] if len(message.command) > 1 else "Admin"
+    
+    try:
+        await client.promote_chat_member(
+            chat_id=message.chat.id,
+            user_id=target.id,
+            privileges=ChatPrivileges(
+                can_manage_chat=True,
+                can_delete_messages=True,
+                can_restrict_members=True,
+                can_invite_users=True,
+                can_pin_messages=True,
+                can_manage_video_chats=True
+            )
+        )
+        try:
+            await client.set_administrator_title(message.chat.id, target.id, title)
+        except Exception:
+            pass
+        await message.reply_text(f"👑 [{target.first_name}](tg://user?id={target.id}) ko Promote kar diya gaya! Title: `{title}`")
+    except Exception as e:
+        await message.reply_text(f"❌ Promote nahi ho paya: `{e}`")
+
+@app.on_message(filters.command("demote", prefixes=[".", "/"]) & (filters.group | filters.me))
+async def demote_handler(client, message):
+    target = message.reply_to_message.from_user if message.reply_to_message else None
+    if not target:
+        return await message.reply_text("⚠️ Kisi admin ke message par reply karke `.demote` likhein.")
+    
+    try:
+        await client.promote_chat_member(
+            chat_id=message.chat.id,
+            user_id=target.id,
+            privileges=ChatPrivileges()
+        )
+        await message.reply_text(f"📉 [{target.first_name}](tg://user?id={target.id}) ko Demote kar diya gaya!")
+    except Exception as e:
+        await message.reply_text(f"❌ Demote nahi ho paya: `{e}`")
 
 if __name__ == "__main__":
     print("Userbot Live and Running!")
