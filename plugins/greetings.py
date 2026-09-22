@@ -23,7 +23,6 @@ def get_token():
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
-        print("[BotAPI Error] BOT_TOKEN missing")
         return None
 
     url = f"https://api.telegram.org/bot{token}/{endpoint}"
@@ -35,11 +34,11 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
             with urllib.request.urlopen(req, timeout=12) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as he:
-            err_body = he.read().decode("utf-8", errors="ignore")
-            print(f"[BotAPI HTTP Error {he.code}] {err_body}")
+            err = he.read().decode("utf-8", errors="ignore")
+            print(f"[BotAPI HTTP {he.code}] {err}")
             return None
-        except Exception as err:
-            print(f"[BotAPI Error] {err}")
+        except Exception as e:
+            print(f"[BotAPI Error] {e}")
             return None
 
     return await asyncio.to_thread(_sync_post)
@@ -51,35 +50,62 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
     except Exception:
         return False
 
+# Available official styles rotation: Primary (Blue), Danger (Red), Success (Green)
+STYLE_PALETTE = ["primary", "danger", "success"]
+
 def parse_buttons_and_clean_text(raw_text: str):
     if not raw_text:
         return "", None
 
-    pattern = r"\[([^\[\]]+)\]\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\[([^\[\]]+?)\|(?:\s*)(https?://[^\s]+)\]"
+    # Matches formats:
+    # 1. [Button Text | URL | style]
+    # 2. [Button Text | URL]
+    # 3. [Button Text](buttonurl:URL)
+    pattern = r"\[([^\[\]]+?)(?:\||\))(?:\s*)(https?://[^\s\|\]\)]+)(?:(?:\s*\|\s*)(primary|danger|success|blue|red|green))?\]?"
+
     buttons = []
     lines = raw_text.split("\n")
     cleaned_lines = []
+    button_counter = 0
 
     for line in lines:
-        matches = re.findall(pattern, line)
-        if matches:
-            row = []
-            for match in matches:
-                text = match[0] if match[0] else match[2]
-                url = match[1] if match[1] else match[3]
+        if "[" in line and ("http://" in line or "https://" in line):
+            # Parse links in line
+            found_buttons = []
+            # Extract bracket tokens
+            raw_tokens = re.findall(r"\[(.*?)\]", line)
+            if raw_tokens:
+                for token in raw_tokens:
+                    parts = [p.strip() for p in token.split("|")]
+                    if len(parts) >= 2 and parts[1].startswith("http"):
+                        b_text = parts[0]
+                        b_url = parts[1]
+                        
+                        # Check explicit color style
+                        if len(parts) >= 3 and parts[2].lower() in ["primary", "danger", "success", "blue", "red", "green"]:
+                            mapped = parts[2].lower()
+                            if mapped == "blue": mapped = "primary"
+                            elif mapped == "red": mapped = "danger"
+                            elif mapped == "green": mapped = "success"
+                            b_style = mapped
+                        else:
+                            # Auto-assign alternating distinct color per button:
+                            # 1st button: Primary (Blue)
+                            # 2nd button: Danger (Red)
+                            # 3rd button: Success (Green)
+                            b_style = STYLE_PALETTE[button_counter % len(STYLE_PALETTE)]
+                            button_counter += 1
 
-                btn_text_lower = text.lower()
-                style = "success"  # Default Green style
-                if any(x in btn_text_lower for x in ["help", "rule", "alert", "danger", "🔴", "report", "demote"]):
-                    style = "danger"
-                elif any(x in btn_text_lower for x in ["channel", "info", "owner", "🔵"]):
-                    style = "primary"
+                        found_buttons.append({
+                            "text": b_text,
+                            "url": b_url,
+                            "style": b_style
+                        })
+                if found_buttons:
+                    buttons.append(found_buttons)
+                    continue
 
-                row.append({"text": text.strip(), "url": url.strip(), "style": style})
-            if row:
-                buttons.append(row)
-        else:
-            cleaned_lines.append(line)
+        cleaned_lines.append(line)
 
     cleaned_text = "\n".join(cleaned_lines).rstrip()
     keyboard = {"inline_keyboard": buttons} if buttons else None
@@ -142,45 +168,22 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
     if keyboard:
         payload["reply_markup"] = keyboard
 
-    # 1. Try sending via direct Bot API (for colored buttons support)
-    res = None
     if m_type == "photo" and f_id:
         payload["photo"] = f_id
         payload["caption"] = formatted_text
-        res = await call_tg_bot_api("sendPhoto", payload)
+        await call_tg_bot_api("sendPhoto", payload)
     elif m_type == "video" and f_id:
         payload["video"] = f_id
         payload["caption"] = formatted_text
-        res = await call_tg_bot_api("sendVideo", payload)
+        await call_tg_bot_api("sendVideo", payload)
     elif m_type == "animation" and f_id:
         payload["animation"] = f_id
         payload["caption"] = formatted_text
-        res = await call_tg_bot_api("sendAnimation", payload)
+        await call_tg_bot_api("sendAnimation", payload)
     else:
         payload["text"] = formatted_text
         payload["disable_web_page_preview"] = True
-        res = await call_tg_bot_api("sendMessage", payload)
-
-    # 2. Fallback to native Pyrogram if Bot API gives any error
-    if not res:
-        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        fallback_markup = None
-        if keyboard and "inline_keyboard" in keyboard:
-            fallback_buttons = [
-                [InlineKeyboardButton(text=btn["text"], url=btn["url"]) for btn in row if "url" in btn]
-                for row in keyboard["inline_keyboard"]
-            ]
-            if any(fallback_buttons):
-                fallback_markup = InlineKeyboardMarkup(fallback_buttons)
-
-        if m_type == "photo" and f_id:
-            await client.send_photo(chat_id=chat_id, photo=f_id, caption=formatted_text, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
-        elif m_type == "video" and f_id:
-            await client.send_video(chat_id=chat_id, video=f_id, caption=formatted_text, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
-        elif m_type == "animation" and f_id:
-            await client.send_animation(chat_id=chat_id, animation=f_id, caption=formatted_text, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
-        else:
-            await client.send_message(chat_id=chat_id, text=formatted_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=fallback_markup)
+        await call_tg_bot_api("sendMessage", payload)
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -238,7 +241,7 @@ async def set_welcome_msg(client: Client, message: Message):
         "<blockquote>🎉 <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙢𝙚𝙨𝙨𝙖𝙜𝙚 𝙨𝙚𝙩</b> 🎉\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
-        "🎨 <b>Buttons:</b> Colored Bot API format applied!\n"
+        "🎨 <b>Buttons:</b> Multi-Color Engine Applied!\n"
         "⚡ <b>Status:</b> Custom Welcome Saved!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
@@ -269,16 +272,10 @@ async def toggle_welcome(client: Client, message: Message):
 
     if mode in ["on", "enable", "chalu"]:
         welcome_data[chat_id]["enabled"] = True
-        await message.reply_text(
-            f"<blockquote>🟢 <b>Greetings Enabled by <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>!</b></blockquote>",
-            parse_mode=ParseMode.HTML
-        )
+        await message.reply_text(f"<blockquote>🟢 <b>Greetings Enabled by {admin_name}!</b></blockquote>", parse_mode=ParseMode.HTML)
     elif mode in ["off", "disable", "band"]:
         welcome_data[chat_id]["enabled"] = False
-        await message.reply_text(
-            f"<blockquote>🔴 <b>Greetings Disabled by <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>!</b></blockquote>",
-            parse_mode=ParseMode.HTML
-        )
+        await message.reply_text(f"<blockquote>🔴 <b>Greetings Disabled by {admin_name}!</b></blockquote>", parse_mode=ParseMode.HTML)
 
 # ==================== .getwelcome & .resetwelcome ====================
 @Client.on_message(filters.command(["getwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -316,4 +313,4 @@ async def welcome_new_member_msg(client: Client, message: Message):
             continue
         chat_title = message.chat.title or "Group"
         await send_welcome_payload(client, message.chat.id, user, chat_title)
-        
+                                                  
