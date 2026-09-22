@@ -67,6 +67,7 @@ def get_user_mention(user):
     return "User"
 
 
+# ==================== BAN ====================
 @Client.on_message(filters.command(["ban"], prefixes=[".", "/"]) & filters.group)
 async def ban_command(client: Client, message: Message):
     if not message.from_user:
@@ -91,17 +92,11 @@ async def ban_command(client: Client, message: Message):
 
     bot = await client.get_me()
     if target.id == bot.id:
-        return await message.reply_text(
-            "<blockquote>🥺 Main khud ko ban nahi kar sakti!</blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>🥺 Main khud ko ban nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
 
     target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
     if target_is_adm:
-        return await message.reply_text(
-            "<blockquote>❌ <b>Admin ko ban nahi kiya ja sakta!</b></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>❌ <b>Admin ko ban nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
 
     try:
         await client.ban_chat_member(message.chat.id, target.id)
@@ -113,12 +108,10 @@ async def ban_command(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
-        await message.reply_text(
-            f"<blockquote>⚠️ <b>Failed to ban:</b> <code>{html.escape(str(e))}</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        await message.reply_text(f"<blockquote>⚠️ <b>Failed to ban:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
 
 
+# ==================== UNBAN ====================
 @Client.on_message(filters.command(["unban"], prefixes=[".", "/"]) & filters.group)
 async def unban_command(client: Client, message: Message):
     if not message.from_user:
@@ -149,12 +142,10 @@ async def unban_command(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
-        await message.reply_text(
-            f"<blockquote>⚠️ <b>Failed to unban:</b> <code>{html.escape(str(e))}</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        await message.reply_text(f"<blockquote>⚠️ <b>Failed to unban:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
 
 
+# ==================== MUTE ====================
 @Client.on_message(filters.command(["mute"], prefixes=[".", "/"]) & filters.group)
 async def mute_command(client: Client, message: Message):
     if not message.from_user:
@@ -179,17 +170,11 @@ async def mute_command(client: Client, message: Message):
 
     bot = await client.get_me()
     if target.id == bot.id:
-        return await message.reply_text(
-            "<blockquote>🥺 Main khud ko mute nahi kar sakti!</blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>🥺 Main khud ko mute nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
 
     target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
     if target_is_adm:
-        return await message.reply_text(
-            "<blockquote>❌ <b>Admin ko mute nahi kiya ja sakta!</b></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>❌ <b>Admin ko mute nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
 
     try:
         await client.restrict_chat_member(
@@ -205,12 +190,10 @@ async def mute_command(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
-        await message.reply_text(
-            f"<blockquote>⚠️ <b>Failed to mute:</b> <code>{html.escape(str(e))}</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        await message.reply_text(f"<blockquote>⚠️ <b>Failed to mute:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
 
 
+# ==================== UNMUTE ====================
 @Client.on_message(filters.command(["unmute"], prefixes=[".", "/"]) & filters.group)
 async def unmute_command(client: Client, message: Message):
     if not message.from_user:
@@ -252,12 +235,10 @@ async def unmute_command(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
-        await message.reply_text(
-            f"<blockquote>⚠️ <b>Failed to unmute:</b> <code>{html.escape(str(e))}</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        await message.reply_text(f"<blockquote>⚠️ <b>Failed to unmute:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
 
 
+# ==================== KICK ====================
 @Client.on_message(filters.command(["kick"], prefixes=[".", "/"]) & filters.group)
 async def kick_command(client: Client, message: Message):
     if not message.from_user:
@@ -282,17 +263,11 @@ async def kick_command(client: Client, message: Message):
 
     bot = await client.get_me()
     if target.id == bot.id:
-        return await message.reply_text(
-            "<blockquote>🥺 Main khud ko kick nahi kar sakti!</blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>🥺 Main khud ko kick nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
 
     target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
     if target_is_adm:
-        return await message.reply_text(
-            "<blockquote>❌ <b>Admin ko kick nahi kiya ja sakta!</b></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>❌ <b>Admin ko kick nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
 
     try:
         await client.ban_chat_member(message.chat.id, target.id)
@@ -303,12 +278,10 @@ async def kick_command(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
-        await message.reply_text(
-            f"<blockquote>⚠️ <b>Failed to kick:</b> <code>{html.escape(str(e))}</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        await message.reply_text(f"<blockquote>⚠️ <b>Failed to kick:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
 
 
+# ==================== WARN SYSTEM ====================
 @Client.on_message(filters.command(["warn"], prefixes=[".", "/"]) & filters.group)
 async def warn_command(client: Client, message: Message):
     if not message.from_user:
@@ -333,17 +306,11 @@ async def warn_command(client: Client, message: Message):
 
     bot = await client.get_me()
     if target.id == bot.id:
-        return await message.reply_text(
-            "<blockquote>🥺 Main khud ko warn nahi de sakti!</blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>🥺 Main khud ko warn nahi de sakti!</blockquote>", parse_mode=ParseMode.HTML)
 
     target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
     if target_is_adm:
-        return await message.reply_text(
-            "<blockquote>❌ <b>Admin ko warn nahi kiya ja sakta!</b></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>❌ <b>Admin ko warn nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
 
     parts = message.text.split(maxsplit=2)
     reason = "Rules violation"
@@ -409,6 +376,7 @@ async def reset_warn_cmd(client: Client, message: Message):
     )
 
 
+# ==================== CALLBACK ACTIONS ====================
 @Client.on_callback_query(filters.regex(r"^adm_(unban|unmute|rmwarn)_(\d+)$"))
 async def admin_buttons_callback(client: Client, query: CallbackQuery):
     action = query.data.split("_")[1]
@@ -420,10 +388,7 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
         return await query.answer("❌ Sirf Admins hi yeh button use kar sakte hain!", show_alert=True)
 
     if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await query.answer(
-            "❌ Aapke paas members ko restrict/unrestrict karne ka right nahi hai!",
-            show_alert=True,
-        )
+        return await query.answer("❌ Aapke paas members ko restrict/unrestrict karne ka right nahi hai!", show_alert=True)
 
     try:
         if action == "unban":
@@ -457,6 +422,7 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
         await query.answer(f"Error: {e}", show_alert=True)
 
 
+# ==================== PIN / UNPIN ====================
 @Client.on_message(filters.command(["pin"], prefixes=[".", "/"]) & filters.group)
 async def pin_command(client: Client, message: Message):
     if not message.from_user:
@@ -467,16 +433,10 @@ async def pin_command(client: Client, message: Message):
         return
 
     if privs != "owner" and not (privs and privs.can_pin_messages):
-        return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b>\nAapke paas messages pin karne ka right nahi hai.</blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b>\nAapke paas messages pin karne ka right nahi hai.</blockquote>", parse_mode=ParseMode.HTML)
 
     if not message.reply_to_message:
-        return await message.reply_text(
-            "<blockquote>⚠️ <b>Message par reply karke <code>.pin</code> karein.</b></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>⚠️ <b>Message par reply karke <code>.pin</code> karein.</b></blockquote>", parse_mode=ParseMode.HTML)
 
     is_loud = "loud" in message.text.lower()
     try:
@@ -490,11 +450,12 @@ async def pin_command(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
-        await message.reply_text(
-            f"<blockquote>⚠️ <b>Pin failed:</b> <code>{html.escape(str(e))}</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        await message.reply_text(f"<blockquote>⚠️ <b>Pin failed:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
 
 
 @Client.on_message(filters.command(["unpin"], prefixes=[".", "/"]) & filters.group)
-async def
+async def unpin_command(client: Client, message: Message):
+    if not message.from_user:
+        return
+
+    is_adm, privs = await get_admin_privileges(client, message.from_user.id, me
