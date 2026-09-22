@@ -37,6 +37,7 @@ DM_START_TEXT = (
     "Main aapke group ki <b>Smart & Aesthetic Manager</b> hoon!\n\n"
     "✨ <i>Custom aesthetic welcomes</i>\n"
     "🛡️ <i>Group protection & silent moderation</i>\n"
+    "🎮 <i>Mini games & Couple matcher</i>\n"
     "💬 <i>AFK system & anti-spam vibes</i>\n\n"
     f"👑 <b>Owner:</b> @{OWNER_USERNAME}\n\n"
     "Niche diye buttons se explore karein:</blockquote>"
@@ -46,7 +47,7 @@ DM_START_TEXT = (
 GROUP_START_TEXT = (
     "<blockquote>✨ <b>Zoya is active here!</b> 🎀\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-    "Hey {mention}! Main is group ko safe aur clean rakhne ke liye tayar hoon.\n\n"
+    "Hey {mention}! Main is group ko safe aur fun rakhne ke liye tayar hoon.\n\n"
     "⚙️ Commands aur settings ke liye mere <b>PM (DM)</b> mein check karein!</blockquote>"
 )
 
@@ -82,7 +83,7 @@ FORMATTING_GUIDE_TEXT = (
     "• Tag karke: <code>.ban @username</code> ya <code>.ban Noor</code></blockquote>"
 )
 
-# First Page Layout (Clean green look)
+# First Page Layout
 def get_start_markup(bot_username: str):
     owner_url = f"https://t.me/{OWNER_USERNAME}"
     add_bot_url = f"https://t.me/{bot_username}?startgroup=true"
@@ -114,7 +115,7 @@ def get_group_markup(bot_username: str):
         ]
     }
 
-# Commands Menu: Request Accept completely removed, clean 2x2 grid + formatting
+# Commands Menu: 2x2 Clean Layout + Formatting Guide
 def get_commands_menu():
     return {
         "inline_keyboard": [
@@ -124,9 +125,10 @@ def get_commands_menu():
             ],
             [
                 {"text": "🎉 Greetings", "callback_data": "cmd_greet", "style": "success"},
-                {"text": "✨ Extra", "callback_data": "cmd_extra", "style": "success"}
+                {"text": "🎮 Games & Fun", "callback_data": "cmd_fun", "style": "success"}
             ],
             [
+                {"text": "✨ Extra", "callback_data": "cmd_extra", "style": "success"},
                 {"text": "📖 Formatting Guide", "callback_data": "open_formatting", "style": "success"}
             ],
             [
@@ -225,7 +227,7 @@ async def back_start_callback(client: Client, query: CallbackQuery):
     await call_tg_bot_api("editMessageText", payload)
     await query.answer()
 
-@Client.on_callback_query(filters.regex(r"^cmd_(admin|pin|greet|extra)$"))
+@Client.on_callback_query(filters.regex(r"^cmd_(admin|pin|greet|extra|fun)$"))
 async def sub_commands_view(client: Client, query: CallbackQuery):
     mod = query.data.split("_")[1]
     
@@ -233,39 +235,47 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
         "admin": (
             "🛡️ <b>Admin Controls:</b>\n"
             "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "• <code>.ban</code> - User ko ban karein (reply ya tag)\n"
+            "• <code>.ban</code> - User ko ban karein\n"
             "• <code>.unban</code> - User ko unban karein\n"
             "• <code>.kick</code> - User ko group se nikalen\n"
-            "• <code>.mute</code> / <code>.unmute</code> - Member ko chup ya un-mute karein\n"
+            "• <code>.mute</code> / <code>.unmute</code> - Member mute/unmute\n"
             "• <code>.promote &lt;title&gt;</code> - Admin banayein title ke sath\n"
-            "• <code>.demote</code> - Admin rights wapas lein"
+            "• <code>.demote</code> - Admin rights hatayein"
         ),
         "pin": (
             "📌 <b>Pin Controls:</b>\n"
             "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "• <code>.pin</code> - Silent pin (bina notify kiye)\n"
-            "• <code>.pin loud</code> - Message pin karein aur sabko notify karein\n"
-            "• <code>.unpin</code> - Replied message ko unpin karein\n"
-            "• <code>.unpinall</code> - Saare pinned messages unpin karein"
+            "• <code>.pin</code> - Silent pin\n"
+            "• <code>.pin loud</code> - Message pin + notification\n"
+            "• <code>.unpin</code> - Message unpin\n"
+            "• <code>.unpinall</code> - Saare unpin karein"
         ),
         "greet": (
             "🎉 <b>Greetings:</b>\n"
             "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "• <code>.setwelcome</code> - Media/Message caption par reply karke welcome set karein\n"
-            "• <code>.welcome on/off</code> - Greetings toggle karein\n"
-            "• <code>.getwelcome</code> - Current welcome preview karein\n"
-            "• <code>.resetwelcome</code> - Default text par reset karein"
+            "• <code>.setwelcome</code> - Media/Text caption par reply karein\n"
+            "• <code>.welcome on/off</code> - Greetings on/off\n"
+            "• <code>.getwelcome</code> - Preview current welcome\n"
+            "• <code>.resetwelcome</code> - Reset to default"
+        ),
+        "fun": (
+            "🎮 <b>Games & Fun Center:</b>\n"
+            "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            "• <code>.couple</code> ya <code>.ship</code> - Group me daily couple match photo card ke sath! 💖\n"
+            "• <code>.dice</code> - Animated dice rolling challenge 🎲\n"
+            "• <code>.dart</code> - Dart board shoot 🎯\n"
+            "• <code>.basket</code> - Basketball shoot 🏀\n"
+            "• <code>.football</code> - Football penalty kick ⚽\n"
+            "• <code>.slot</code> - Casino 777 jackpot spin 🎰"
         ),
         "extra": (
             "✨ <b>Extra Features:</b>\n"
             "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            "💤 <b>AFK Module:</b>\n"
+            "💤 <b>AFK System:</b>\n"
             "• <code>.afk &lt;reason&gt;</code> - Offline status lagayein.\n"
-            "• Koi tag karega toh bot notify karega.\n"
-            "• Wapas aakar message karte hi automated <i>Welcome Back</i> notice aayega aur AFK hat jayega.\n\n"
+            "• Return aane par automated <i>Welcome Back</i> notice aayega.\n\n"
             "🎨 <b>Quotes (.q):</b>\n"
-            "• Kisi bhi text par reply karke <code>.q</code> bhejein.\n"
-            "• Clean aesthetic quote preview create hota hai."
+            "• Message par reply karke <code>.q</code> bhejein clean quote ke liye."
         )
     }
     
