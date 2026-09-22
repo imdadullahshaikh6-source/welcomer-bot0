@@ -10,6 +10,17 @@ from pyrogram.types import Message
 # Bestie aesthetic emojis for fun vibes
 FUN_EMOJIS = ["🌸", "🎀", "🧸", "🌷", "✨", "🍓", "🍧", "🍒", "💐", "🤍", "💖", "💘", "💌", "🦋"]
 
+FEMALE_KEYWORDS = ["girl", "queen", "princess", "she", "her", "miss", "angel", "doll", "baby", "cute", "kudi", "ladki", "noor", "zoya", "riya", "priya"]
+MALE_KEYWORDS = ["boy", "king", "prince", "he", "him", "mr", "badshah", "tiger", "devil", "dude", "bhai", "ladka", "itachi"]
+
+def guess_gender(name: str) -> str:
+    n = (name or "").lower()
+    if any(k in n for k in FEMALE_KEYWORDS):
+        return "female"
+    if any(k in n for k in MALE_KEYWORDS):
+        return "male"
+    return "unknown"
+
 def create_circular_avatar(img: Image.Image, size=(300, 300)) -> Image.Image:
     img = img.resize(size, Image.Resampling.LANCZOS).convert("RGBA")
     mask = Image.new("L", size, 0)
@@ -59,7 +70,7 @@ async def generate_couple_image(client: Client, user1, user2) -> BytesIO:
     draw.ellipse((360, 170, 440, 250), fill=(255, 75, 130, 255))
 
     output = BytesIO()
-    output.name = "couple.png"
+    output.name = "waifu.png"
     canvas.save(output, format="PNG")
     output.seek(0)
     return output
@@ -83,7 +94,7 @@ async def couple_command(client: Client, message: Message):
         return await msg.edit_text("<blockquote>⚠️ Match dhundne ke liye group me kam se kam 2 active members hone chahiye!</blockquote>", parse_mode=ParseMode.HTML)
 
     user1, user2 = random.sample(members, 2)
-    percentage = random.randint(55, 100)
+    percentage = random.randint(60, 100)
     emoji = random.choice(FUN_EMOJIS)
     
     filled = int(percentage / 10)
@@ -93,7 +104,7 @@ async def couple_command(client: Client, message: Message):
     u2_mention = f"<a href='tg://user?id={user2.id}'>{user2.first_name or 'User'}</a>"
 
     caption = (
-        f"<blockquote>{emoji} <b>𝙏𝙤𝙙𝙖𝙮'𝙨 𝘾𝙤𝙪𝙥𝙡𝙚 𝙈𝙖𝙩𝙘𝙝</b> 💌\n"
+        f"<blockquote>{emoji} <b>𝙏𝙤𝙙𝙖𝙮's 𝘾𝙤𝙪𝙥𝙡𝙚 𝙈𝙖𝙩𝙘𝙝</b> 💌\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👑 {u1_mention} <b>+</b> {u2_mention} 👑\n\n"
         f"💖 <b>Compatibility:</b> <code>{percentage}%</code>\n"
@@ -103,6 +114,63 @@ async def couple_command(client: Client, message: Message):
 
     try:
         photo = await generate_couple_image(client, user1, user2)
+        await message.reply_photo(photo=photo, caption=caption, parse_mode=ParseMode.HTML)
+        await msg.delete()
+    except Exception:
+        await msg.edit_text(caption, parse_mode=ParseMode.HTML)
+
+# ==================== .waifu ONLY ====================
+@Client.on_message(filters.command(["waifu"], prefixes=[".", "/"]) & filters.group)
+async def waifu_only_command(client: Client, message: Message):
+    if not message.from_user:
+        return
+
+    chat_id = message.chat.id
+    current_user = message.from_user
+
+    msg = await message.reply_text("<blockquote>✨ <i>Zoya is searching the perfect waifu/partner for you...</i> 🔍</blockquote>", parse_mode=ParseMode.HTML)
+
+    members = []
+    try:
+        async for m in client.get_chat_members(chat_id, limit=90):
+            if not m.user.is_bot and not m.user.is_deleted and m.user.id != current_user.id:
+                members.append(m.user)
+    except Exception:
+        pass
+
+    if not members:
+        return await msg.edit_text("<blockquote>⚠️ Group me doosre active members nahi mile!</blockquote>", parse_mode=ParseMode.HTML)
+
+    user_gender = guess_gender(current_user.first_name)
+    target_gender = "male" if user_gender == "female" else "female"
+
+    # Match opposite gender pool if possible
+    matching_pool = [m for m in members if guess_gender(m.first_name) == target_gender]
+    if matching_pool:
+        partner = random.choice(matching_pool)
+    else:
+        partner = random.choice(members)
+
+    percentage = random.randint(65, 100)
+    emoji = random.choice(FUN_EMOJIS)
+    filled = int(percentage / 10)
+    bar = "▰" * filled + "▱" * (10 - filled)
+
+    my_mention = f"<a href='tg://user?id={current_user.id}'>{current_user.first_name or 'You'}</a>"
+    p_mention = f"<a href='tg://user?id={partner.id}'>{partner.first_name or 'Waifu'}</a>"
+
+    caption = (
+        f"<blockquote>{emoji} <b>𝙒𝙖𝙞𝙛𝙪 𝙈𝙖𝙩𝙘𝙝</b> 💍\n"
+        "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+        f"👤 <b>For:</b> {my_mention}\n"
+        f"✨ <b>Your Waifu:</b> {p_mention}\n\n"
+        f"💖 <b>Compatibility:</b> <code>{percentage}%</code>\n"
+        f"✨ <b>Love Meter:</b> <code>[{bar}]</code>\n\n"
+        "🎀 <i>Congratulations! Aapki Waifu mil gayi hai!</i> 🍓</blockquote>"
+    )
+
+    try:
+        photo = await generate_couple_image(client, current_user, partner)
         await message.reply_photo(photo=photo, caption=caption, parse_mode=ParseMode.HTML)
         await msg.delete()
     except Exception:
