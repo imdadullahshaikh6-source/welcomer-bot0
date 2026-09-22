@@ -1,6 +1,6 @@
 import html
 from pyrogram import Client, filters
-from pyrogram.enums import ParseMode, ChatMemberStatus
+from pyrogram.enums import ParseMode, ChatMemberStatus, MessageEntityType
 from pyrogram.types import Message, ChatPermissions, ChatPrivileges
 
 async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
@@ -10,33 +10,42 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
     except Exception:
         return False
 
-async def can_bot_moderate(client: Client, chat_id: int) -> bool:
-    try:
-        bot = await client.get_me()
-        member = await client.get_chat_member(chat_id, bot.id)
-        return member.status == ChatMemberStatus.ADMINISTRATOR and member.privileges.can_restrict_members
-    except Exception:
-        return False
-
 async def extract_target_user(client: Client, message: Message):
+    # 1. Check if replied to a message
     if message.reply_to_message:
         if message.reply_to_message.from_user:
             return message.reply_to_message.from_user
         elif message.reply_to_message.sender_chat:
             return message.reply_to_message.sender_chat
 
-    parts = message.text.split(maxsplit=2)
+    # 2. Check for text mention entity (e.g. .ban Noor <\\>)
+    if message.entities:
+        for ent in message.entities:
+            if ent.type == MessageEntityType.TEXT_MENTION and ent.user:
+                return ent.user
+            elif ent.type == MessageEntityType.MENTION:
+                raw_user = message.text[ent.offset : ent.offset + ent.length]
+                try:
+                    return await client.get_users(raw_user)
+                except Exception:
+                    pass
+
+    # 3. Check for raw ID or Username after command
+    parts = message.text.split(maxsplit=1)
     if len(parts) > 1:
-        raw_user = parts[1].strip()
+        arg = parts[1].strip()
+        # In case the user passed multiple words, take the first token or check if it's numeric/username
+        token = arg.split()[0]
         try:
-            if raw_user.isdigit() or raw_user.startswith("-100"):
-                user_id = int(raw_user)
+            if token.isdigit() or token.startswith("-100"):
+                return await client.get_users(int(token))
+            elif token.startswith("@"):
+                return await client.get_users(token)
             else:
-                user_id = raw_user
-            user_obj = await client.get_users(user_id)
-            return user_obj
+                return await client.get_users(arg)
         except Exception:
             return None
+
     return None
 
 def get_user_mention(user):
@@ -56,7 +65,7 @@ async def ban_command(client: Client, message: Message):
     target = await extract_target_user(client, message)
     if not target:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>Kisi user ke message par reply karein ya ID/Username dein:</b> <code>.ban @username</code></blockquote>",
+            "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.ban @username</code></blockquote>",
             parse_mode=ParseMode.HTML
         )
 
@@ -73,7 +82,7 @@ async def ban_command(client: Client, message: Message):
         await message.reply_text(
             f"<blockquote>🚫 <b>Banned!</b>\n"
             f"👤 <b>User:</b> {mention}\n"
-            f"⚡ <b>Action:</b> Successfully removed & blacklisted.</blockquote>",
+            f"⚡ <b>Action:</b> Successfully removed from group.</blockquote>",
             parse_mode=ParseMode.HTML
         )
     except Exception as e:
@@ -88,7 +97,7 @@ async def unban_command(client: Client, message: Message):
     target = await extract_target_user(client, message)
     if not target:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>User par reply karein ya username/ID mention karein:</b> <code>.unban @username</code></blockquote>",
+            "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.unban @username</code></blockquote>",
             parse_mode=ParseMode.HTML
         )
 
@@ -113,7 +122,7 @@ async def kick_command(client: Client, message: Message):
     target = await extract_target_user(client, message)
     if not target:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>Kisi user par reply karein ya ID dein:</b> <code>.kick @username</code></blockquote>",
+            "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.kick @username</code></blockquote>",
             parse_mode=ParseMode.HTML
         )
 
@@ -125,7 +134,6 @@ async def kick_command(client: Client, message: Message):
         return await message.reply_text("<blockquote>❌ <b>Admin ko kick nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
 
     try:
-        # Kick means ban then unban immediately so they can re-join if they want
         await client.ban_chat_member(message.chat.id, target.id)
         await client.unban_chat_member(message.chat.id, target.id)
         mention = get_user_mention(target)
@@ -147,7 +155,7 @@ async def mute_command(client: Client, message: Message):
     target = await extract_target_user(client, message)
     if not target:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>Kisi user par reply karein ya ID dein:</b> <code>.mute @username</code></blockquote>",
+            "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.mute @username</code></blockquote>",
             parse_mode=ParseMode.HTML
         )
 
@@ -183,7 +191,7 @@ async def unmute_command(client: Client, message: Message):
     target = await extract_target_user(client, message)
     if not target:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>Kisi user par reply karein ya ID dein:</b> <code>.unmute @username</code></blockquote>",
+            "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.unmute @username</code></blockquote>",
             parse_mode=ParseMode.HTML
         )
 
@@ -204,7 +212,7 @@ async def unmute_command(client: Client, message: Message):
         await message.reply_text(
             f"<blockquote>🔊 <b>Unmuted!</b>\n"
             f"👤 <b>User:</b> {mention}\n"
-            f"💬 <b>Status:</b> Restrictions removed, bol sakte hain ab!</blockquote>",
+            f"💬 <b>Status:</b> Restrictions removed!</blockquote>",
             parse_mode=ParseMode.HTML
         )
     except Exception as e:
