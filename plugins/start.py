@@ -1,6 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 
 START_TEXT = """<blockquote>👑 <b>Hello {mention}</b>
 
@@ -22,23 +22,29 @@ ADMIN_TEXT = """<blockquote>🛡️ <b>Admin Commands & Features:</b>
 PIN_TEXT = """<blockquote>📌 <b>Pin & Unpin Management:</b>
 
 • <code>.pin</code> - Reply kiye message ko silently pin karein (with Quick Unpin Button)
-• <code>.pin loud</code> - Message pin karein sabhi members ko alert/notification bhej kar
+• <code>.pin loud</code> - Message pin karein alert notification ke sath
 • <code>.unpin</code> - Pinned message par reply karke unpin karein
-• <code>.unpinall</code> - Chat ke saare pinned messages ek sath clear karein</blockquote>"""
+• <code>.unpinall</code> - Chat ke saare pinned messages clear karein</blockquote>"""
+
+QUOTE_TEXT = """<blockquote>🎨 <b>Quotly Sticker Generator:</b>
+
+• <code>.q</code> ya <code>/q</code> - Kisi bhi text message par reply karke stylish Quotly sticker banayein!
+• Sender ka profile avatar, name aur message ek round sticker ban jayega.
+• Group ka koi bhi member is feature ka use kar sakta hai.</blockquote>"""
 
 AFK_TEXT = """<blockquote>💤 <b>AFK (Away From Keyboard) System:</b>
 
 • <code>.afk &lt;reason&gt;</code> - AFK status set karein
 • Group ke sabhi members ke liye fully functional
 • Mention ya reply karne par bot instant notice dega
-• Wapas message karne par automatically disable ho jayega</blockquote>"""
+• Wapas aane par automatically disable ho jayega</blockquote>"""
 
 WELCOMER_TEXT = """<blockquote>✨ <b>Join Welcomer & Automation:</b>
 
-• Pending join requests auto-approval system
-• New users ke aane par custom quote welcome message
-• <code>.start</code> - Welcomer automation on karein
-• <code>.stop</code> - Welcomer automation pause karein</blockquote>"""
+• Pending join requests approval system
+• New users ke aane par aesthetic welcome message
+• <code>.uthao</code> - Jama hui pending join requests ko approve karein
+• <code>.ruko</code> - Approval process ko turant pause karein</blockquote>"""
 
 def start_keyboard(bot_username: str):
     return InlineKeyboardMarkup([
@@ -47,7 +53,10 @@ def start_keyboard(bot_username: str):
             InlineKeyboardButton("📌 Pin System", callback_data="help_pin")
         ],
         [
-            InlineKeyboardButton("💤 AFK System", callback_data="help_afk"),
+            InlineKeyboardButton("🎨 Quote Sticker", callback_data="help_quote"),
+            InlineKeyboardButton("💤 AFK System", callback_data="help_afk")
+        ],
+        [
             InlineKeyboardButton("✨ Join Welcomer", callback_data="help_welcomer")
         ],
         [
@@ -59,8 +68,9 @@ BACK_KEYBOARD = InlineKeyboardMarkup([
     [InlineKeyboardButton("« Back", callback_data="help_back")]
 ])
 
-@Client.on_message(filters.command("start") & filters.private)
-async def private_start(client, message):
+# ==================== PRIVATE /start ====================
+@Client.on_message(filters.command("start", prefixes=[".", "/"]) & filters.private)
+async def private_start(client: Client, message: Message):
     bot = await client.get_me()
     mention = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.first_name}</a>"
     await message.reply_text(
@@ -69,8 +79,43 @@ async def private_start(client, message):
         parse_mode=ParseMode.HTML
     )
 
+# ==================== GROUP .start /start INTRO ====================
+@Client.on_message(filters.command("start", prefixes=[".", "/"]) & filters.group)
+async def group_start_intro(client: Client, message: Message):
+    bot = await client.get_me()
+    user_name = message.from_user.first_name if message.from_user else "Member"
+    user_mention = f"<a href='tg://user?id={message.from_user.id}'>{user_name}</a>" if message.from_user else "Member"
+
+    group_text = (
+        "<blockquote>👋 <b>Hey {user_mention}!</b>\n"
+        "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+        f"Main <b>{bot.first_name}</b> hoon, ek modern group management bot!\n\n"
+        "⚡ <b>Quick Features:</b>\n"
+        "• 🛡️ <i>Admin Control (.promote, .demote, .mute, .ban, .kick)</i>\n"
+        "• 📌 <i>Pin Management (.pin, .unpin, .unpinall)</i>\n"
+        "• 🎨 <i>Quote Stickers (.q text message par reply)</i>\n"
+        "• 💤 <i>AFK System (.afk reason)</i>\n"
+        "• ✨ <i>Pending Requests Approval (.uthao, .ruko)</i>\n\n"
+        "Mere commands aur setup dekhne ke liye niche DM button dabayein.</blockquote>"
+    ).format(user_mention=user_mention)
+
+    group_keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("💬 Help & Features (PM)", url=f"https://t.me/{bot.username}?start=help"),
+            InlineKeyboardButton("➕ Add Me", url=f"https://t.me/{bot.username}?startgroup=true")
+        ]
+    ])
+
+    await message.reply_text(
+        text=group_text,
+        reply_markup=group_keyboard,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True
+    )
+
+# ==================== INLINE CALLBACKS ====================
 @Client.on_callback_query()
-async def callback_handler(client, query: CallbackQuery):
+async def callback_handler(client: Client, query: CallbackQuery):
     data = query.data
     bot = await client.get_me()
     mention = f"<a href='tg://user?id={query.from_user.id}'>{query.from_user.first_name}</a>"
@@ -79,6 +124,8 @@ async def callback_handler(client, query: CallbackQuery):
         await query.message.edit_text(text=ADMIN_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_pin":
         await query.message.edit_text(text=PIN_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
+    elif data == "help_quote":
+        await query.message.edit_text(text=QUOTE_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_afk":
         await query.message.edit_text(text=AFK_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_welcomer":
