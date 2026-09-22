@@ -5,9 +5,10 @@ import urllib.request
 import re
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
-from pyrogram.types import Message, ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message, ChatMemberUpdated, CallbackQuery
 
 welcome_data = {}
+link_registry = {}
 
 DEFAULT_WELCOME = (
     "<blockquote expandable>✨ <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙩𝙤 𝙩𝙝𝙚 𝙜𝙧𝙤𝙪𝙥</b> ✨\n"
@@ -33,12 +34,8 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
         try:
             with urllib.request.urlopen(req, timeout=12) as resp:
                 return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as he:
-            err = he.read().decode("utf-8", errors="ignore")
-            print(f"[BotAPI HTTP {he.code}] {err}")
-            return None
         except Exception as e:
-            print(f"[BotAPI Conn Error] {e}")
+            print(f"[BotAPI Error] {e}")
             return None
 
     return await asyncio.to_thread(_sync)
@@ -51,23 +48,20 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
         return False
 
 # Distinct Color List: 1st Blue (primary), 2nd Red (danger), 3rd Green (success)
-PALETTE = ["primary", "danger", "success"]
+COLOR_CYCLE = ["primary", "danger", "success"]
 
-def parse_buttons_and_clean_text(raw_text: str):
+def parse_buttons_and_clean_text(raw_text: str, chat_id: int):
     if not raw_text:
         return "", None
 
     buttons = []
     lines = raw_text.split("\n")
     cleaned_lines = []
-    btn_count = 0
+    btn_idx = 0
 
-    # Handles:
-    # 1. [Text](buttonurl:https://link)
-    # 2. [Text](https://link)
-    # 3. [Text | https://link]
-    # 4. [Text | https://link | color]
-    btn_pattern = re.compile(r"\[([^\[\]\(\)\|]+)\](?:\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\|\s*(https?://[^\[\]\|\s]+)(?:\s*\|\s*([a-zA-Z]+))?\])")
+    btn_pattern = re.compile(
+        r"\[([^\[\]\(\)\|]+)\](?:\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\|\s*(https?://[^\[\]\|\s]+)(?:\s*\|\s*([a-zA-Z]+))?\])"
+    )
 
     for line in lines:
         if "[" in line and "http" in line:
@@ -86,11 +80,19 @@ def parse_buttons_and_clean_text(raw_text: str):
                     elif custom_color in ["green", "success"]:
                         style = "success"
                     else:
-                        # Auto distinct colors: 1st Blue, 2nd Red, 3rd Green
-                        style = PALETTE[btn_count % len(PALETTE)]
-                        btn_count += 1
+                        style = COLOR_CYCLE[btn_idx % len(COLOR_CYCLE)]
+                        btn_idx += 1
 
-                    row.append({"text": text, "url": url, "style": style})
+                    # Save link in registry so callback can open it
+                    cb_key = f"wl_{chat_id}_{btn_idx}"
+                    link_registry[cb_key] = {"title": text, "url": url}
+
+                    # Using callback_data with style allows true vibrant Bot API Colors!
+                    row.append({
+                        "text": text,
+                        "callback_data": cb_key,
+                        "style": style
+                    })
                 if row:
                     buttons.append(row)
                     continue
@@ -151,69 +153,28 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
 
     formatted_text = apply_template_tags(raw_template, user, chat_title)
 
-    # 1. Send via Telegram Bot API (Native color buttons)
     payload = {"chat_id": chat_id, "parse_mode": "HTML"}
     if keyboard:
         payload["reply_markup"] = keyboard
 
-    sent_ok = False
     if m_type == "photo" and f_id:
         payload["photo"] = f_id
         payload["caption"] = formatted_text
         res = await call_tg_bot_api("sendPhoto", payload)
-        if res and res.get("ok"):
-            sent_ok = True
+        if not (res and res.get("ok")):
+            await client.send_photo(chat_id=chat_id, photo=f_id, caption=formatted_text, parse_mode=ParseMode.HTML)
     elif m_type == "video" and f_id:
         payload["video"] = f_id
         payload["caption"] = formatted_text
         res = await call_tg_bot_api("sendVideo", payload)
-        if res and res.get("ok"):
-            sent_ok = True
-    elif m_type == "text":
+        if not (res and res.get("ok")):
+            await client.send_video(chat_id=chat_id, video=f_id, caption=formatted_text, parse_mode=ParseMode.HTML)
+    else:
         payload["text"] = formatted_text
         payload["disable_web_page_preview"] = True
         res = await call_tg_bot_api("sendMessage", payload)
-        if res and res.get("ok"):
-            sent_ok = True
-
-    # 2. Pyrogram Fallback
-    if not sent_ok:
-        fallback_markup = None
-        if keyboard and "inline_keyboard" in keyboard:
-            fallback_buttons = [
-                [InlineKeyboardButton(text=b["text"], url=b["url"]) for b in row]
-                for row in keyboard["inline_keyboard"]
-            ]
-            if fallback_buttons:
-                fallback_markup = InlineKeyboardMarkup(fallback_buttons)
-
-        try:
-            if m_type == "photo" and f_id:
-                await client.send_photo(
-                    chat_id=chat_id,
-                    photo=f_id,
-                    caption=formatted_text,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=fallback_markup
-                )
-            elif m_type == "video" and f_id:
-                await client.send_video(
-                    chat_id=chat_id,
-                    video=f_id,
-                    caption=formatted_text,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=fallback_markup
-                )
-            else:
-                await client.send_message(
-                    chat_id=chat_id,
-                    text=formatted_text,
-                    parse_mode=ParseMode.HTML,
-                    disable_web_page_preview=True,
-                    reply_markup=fallback_markup
-                )
-        except Exception as e:
-            print(f"[Fallback error]: {e}")
+        if not (res and res.get("ok")):
+            await client.send_message(chat_id=chat_id, text=formatted_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -255,7 +216,7 @@ async def set_welcome_msg(client: Client, message: Message):
             parse_mode=ParseMode.HTML
         )
 
-    cleaned_text, parsed_keyboard = parse_buttons_and_clean_text(target_text)
+    cleaned_text, parsed_keyboard = parse_buttons_and_clean_text(target_text, chat_id)
     final_text = format_exact_quotes(cleaned_text)
 
     welcome_data[chat_id] = {
@@ -274,10 +235,22 @@ async def set_welcome_msg(client: Client, message: Message):
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
         f"🖼️ <b>Media:</b> <code>{media_type.upper()}</code>\n"
-        f"🎨 <b>Buttons Detected:</b> <code>{btn_count}</code> (Blue / Red Auto-Assigned)\n"
+        f"🎨 <b>Buttons Configured:</b> <code>{btn_count}</code> (True Color Buttons Enabled)\n"
         "⚡ <b>Status:</b> Saved Successfully!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
+
+# ==================== Button Callback Router ====================
+@Client.on_callback_query(filters.regex(r"^wl_"))
+async def welcome_button_click(client: Client, query: CallbackQuery):
+    btn_data = link_registry.get(query.data)
+    if not btn_data:
+        return await query.answer("🔗 Link expired! Please re-check welcome message.", show_alert=True)
+
+    url = btn_data["url"]
+    title = btn_data["title"]
+    # Open URL via Telegram official alert or open button response
+    await query.answer(url=url)
 
 # ==================== .welcome on / off ====================
 @Client.on_message(filters.command(["welcome"], prefixes=[".", "/"]) & filters.group)
