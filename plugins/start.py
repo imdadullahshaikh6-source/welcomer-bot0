@@ -2,45 +2,42 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 START_TEXT = """
-👋 **Hello {mention}!**
-
-Main ek advance **Group Management Bot** hoon. Mujhe aapke group ko manage karne aur automatically join requests accept karne ke liye banaya gaya hai.
-
-Niche diye gaye buttons par click karke mere features ke baare mein jaanein! 🚀
+> 👑 **Hello {mention}**
+> 
+> Main aapka **All-in-One Group Manager Bot** hoon. 
+> Groups ko manage karne, join requests auto-accept karne, 
+> aur pure chat environment ko maintain karne ke liye tayar hoon!
+> 
+> Niche diye gaye menu se mere features check karein:
 """
 
 ADMIN_TEXT = """
-🛡️ **Admin Commands & Features:**
-
-• `.promote <title>` - Kisi user ko group ka admin banayein.
-• `.demote` - Kisi admin se powers wapas lein.
-• `.ban` - User ko permanently group se ban karein.
-• `.kick` - User ko group se kick karein.
-• `.mute` - User ko text messages bhejne se mute karein.
-• `.unmute` - Muted user ko unmute karein.
-
-*(Yeh commands sirf Owner aur Group Admins ke liye hain)*
+> 🛡️ **Admin Commands & Features:**
+> 
+> • `.promote <title>` - Admin banayein (Quick Demote Button ke sath)
+> • `.demote` - Admin rights revoke karein
+> • `.mute` - User ko mute karein (Quick Unmute Button ke sath)
+> • `.unmute` - User ko unmute karein
+> • `.ban` - Permanently ban karein
+> • `.kick` - Group se kick karein
 """
 
 AFK_TEXT = """
-💤 **AFK (Away From Keyboard) System:**
-
-• `.afk <reason>` - AFK mode on karein (e.g. `.afk khana khane`).
-• Jab koi aapko group me tag ya reply karega, bot unhein batayega ki aap busy hain.
-• Wapas aakar jaise hi aap koi message bhejenge, AFK mode automatically remove ho jayega.
-
-*(Yeh feature group ke sabhi members use kar sakte hain)*
+> 💤 **AFK (Away From Keyboard) System:**
+> 
+> • `.afk <reason>` - AFK status set karein
+> • Group ke sabhi members ke liye fully functional
+> • Mention ya reply karne par bot instant notice dega
+> • Wapas aane par automatically disable ho jayega
 """
 
 WELCOMER_TEXT = """
-✨ **Join Requests & Auto Welcome:**
-
-• Bot group ke pending join requests ko automatically accept karta hai.
-• Accept hone ke baad new member ko warm welcome message bhejta hai.
-• `.start` - Welcomer automation ko activate karein.
-• `.stop` - Automation ko pause/stop karein.
-
-*(Yeh controls sirf Bot Owner ke paas hote hain)*
+> ✨ **Join Welcomer & Automation:**
+> 
+> • Pending join requests auto-approval system
+> • New users ke aane par custom quote welcome message
+> • `.start` - Welcomer automation on karein
+> • `.stop` - Welcomer automation pause karein
 """
 
 def start_keyboard(bot_username: str):
@@ -61,7 +58,6 @@ BACK_KEYBOARD = InlineKeyboardMarkup([
     [InlineKeyboardButton("« Back", callback_data="help_back")]
 ])
 
-# ==================== /start in Private ====================
 @Client.on_message(filters.command("start") & filters.private)
 async def private_start(client, message):
     bot = await client.get_me()
@@ -71,7 +67,6 @@ async def private_start(client, message):
         reply_markup=start_keyboard(bot.username)
     )
 
-# ==================== Button Clicks (Callbacks) ====================
 @Client.on_callback_query()
 async def callback_handler(client, query: CallbackQuery):
     data = query.data
@@ -90,4 +85,4 @@ async def callback_handler(client, query: CallbackQuery):
             reply_markup=start_keyboard(bot.username)
         )
     await query.answer()
-  
+    
