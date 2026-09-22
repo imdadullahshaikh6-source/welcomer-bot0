@@ -7,8 +7,6 @@ from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.types import Message, ChatMemberUpdated
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
-
 welcome_data = {}
 
 DEFAULT_WELCOME = (
@@ -19,17 +17,29 @@ DEFAULT_WELCOME = (
     "💬 Group rules follow karein aur chill karein!</blockquote>"
 )
 
+def get_token():
+    return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
+
 async def call_tg_bot_api(endpoint: str, payload: dict):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{endpoint}"
+    token = get_token()
+    if not token:
+        print("[BotAPI Error] BOT_TOKEN missing")
+        return None
+
+    url = f"https://api.telegram.org/bot{token}/{endpoint}"
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
 
     def _sync_post():
         try:
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with urllib.request.urlopen(req, timeout=12) as response:
                 return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as he:
+            err_body = he.read().decode("utf-8", errors="ignore")
+            print(f"[BotAPI HTTP Error {he.code}] {err_body}")
+            return None
         except Exception as err:
-            print(f"[BotAPI Greetings Error] {err}")
+            print(f"[BotAPI Error] {err}")
             return None
 
     return await asyncio.to_thread(_sync_post)
@@ -57,11 +67,10 @@ def parse_buttons_and_clean_text(raw_text: str):
             for match in matches:
                 text = match[0] if match[0] else match[2]
                 url = match[1] if match[1] else match[3]
-                
-                # Check for color styles
+
                 btn_text_lower = text.lower()
-                style = "success" # Default vibrant green
-                if any(x in btn_text_lower for x in ["help", "rule", "alert", "danger", "🔴", "report"]):
+                style = "success"  # Default Green style
+                if any(x in btn_text_lower for x in ["help", "rule", "alert", "danger", "🔴", "report", "demote"]):
                     style = "danger"
                 elif any(x in btn_text_lower for x in ["channel", "info", "owner", "🔵"]):
                     style = "primary"
@@ -79,12 +88,14 @@ def parse_buttons_and_clean_text(raw_text: str):
 def format_exact_quotes(html_text: str) -> str:
     if not html_text:
         return ""
+    if "<blockquote" not in html_text:
+        return f"<blockquote expandable>{html_text}</blockquote>"
     cleaned = re.sub(r'<blockquote[^>]*>', '<blockquote>', html_text)
     return re.sub(r'<blockquote>', '<blockquote expandable>', cleaned, count=1)
 
 def apply_template_tags(template: str, user, chat_title: str) -> str:
-    first_name = user.first_name or "Member"
-    last_name = user.last_name or ""
+    first_name = (user.first_name or "Member").replace("<", "").replace(">", "")
+    last_name = (user.last_name or "").replace("<", "").replace(">", "")
     full_name = f"{first_name} {last_name}".strip()
     mention = f"<a href='tg://user?id={user.id}'>{first_name}</a>"
     username = f"@{user.username}" if user.username else mention
@@ -105,13 +116,19 @@ def apply_template_tags(template: str, user, chat_title: str) -> str:
         res = re.sub(re.escape(key), val, res, flags=re.IGNORECASE)
     return res
 
-async def send_custom_welcome(client: Client, chat_id: int, user, chat_title: str):
-    settings = welcome_data.get(chat_id, {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None})
+async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: str):
+    settings = welcome_data.get(chat_id, {
+        "enabled": True,
+        "type": "text",
+        "file_id": None,
+        "text": DEFAULT_WELCOME,
+        "keyboard": None
+    })
 
     if not settings.get("enabled", True):
         return
 
-    raw_template = settings.get("text", DEFAULT_WELCOME)
+    raw_template = settings.get("text") or DEFAULT_WELCOME
     keyboard = settings.get("keyboard")
     m_type = settings.get("type", "text")
     f_id = settings.get("file_id")
@@ -125,22 +142,45 @@ async def send_custom_welcome(client: Client, chat_id: int, user, chat_title: st
     if keyboard:
         payload["reply_markup"] = keyboard
 
+    # 1. Try sending via direct Bot API (for colored buttons support)
+    res = None
     if m_type == "photo" and f_id:
         payload["photo"] = f_id
         payload["caption"] = formatted_text
-        await call_tg_bot_api("sendPhoto", payload)
+        res = await call_tg_bot_api("sendPhoto", payload)
     elif m_type == "video" and f_id:
         payload["video"] = f_id
         payload["caption"] = formatted_text
-        await call_tg_bot_api("sendVideo", payload)
+        res = await call_tg_bot_api("sendVideo", payload)
     elif m_type == "animation" and f_id:
         payload["animation"] = f_id
         payload["caption"] = formatted_text
-        await call_tg_bot_api("sendAnimation", payload)
+        res = await call_tg_bot_api("sendAnimation", payload)
     else:
         payload["text"] = formatted_text
         payload["disable_web_page_preview"] = True
-        await call_tg_bot_api("sendMessage", payload)
+        res = await call_tg_bot_api("sendMessage", payload)
+
+    # 2. Fallback to native Pyrogram if Bot API gives any error
+    if not res:
+        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        fallback_markup = None
+        if keyboard and "inline_keyboard" in keyboard:
+            fallback_buttons = [
+                [InlineKeyboardButton(text=btn["text"], url=btn["url"]) for btn in row if "url" in btn]
+                for row in keyboard["inline_keyboard"]
+            ]
+            if any(fallback_buttons):
+                fallback_markup = InlineKeyboardMarkup(fallback_buttons)
+
+        if m_type == "photo" and f_id:
+            await client.send_photo(chat_id=chat_id, photo=f_id, caption=formatted_text, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
+        elif m_type == "video" and f_id:
+            await client.send_video(chat_id=chat_id, video=f_id, caption=formatted_text, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
+        elif m_type == "animation" and f_id:
+            await client.send_animation(chat_id=chat_id, animation=f_id, caption=formatted_text, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
+        else:
+            await client.send_message(chat_id=chat_id, text=formatted_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=fallback_markup)
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -153,8 +193,7 @@ async def set_welcome_msg(client: Client, message: Message):
 
     media_type = "text"
     file_id = None
-    target_text = None
-    custom_keyboard = None
+    target_text = ""
 
     if reply:
         if reply.photo:
@@ -246,32 +285,7 @@ async def toggle_welcome(client: Client, message: Message):
 async def get_welcome_cmd(client: Client, message: Message):
     if not message.from_user or not await is_admin(client, message.from_user.id, message.chat.id):
         return
-    curr = welcome_data.get(message.chat.id, {"type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None})
-    m_type = curr.get("type", "text")
-    f_id = curr.get("file_id")
-    txt = curr.get("text", DEFAULT_WELCOME)
-    kb = curr.get("keyboard")
-
-    payload = {"chat_id": message.chat.id, "parse_mode": "HTML"}
-    if kb:
-        payload["reply_markup"] = kb
-
-    if m_type == "photo" and f_id:
-        payload["photo"] = f_id
-        payload["caption"] = txt
-        await call_tg_bot_api("sendPhoto", payload)
-    elif m_type == "video" and f_id:
-        payload["video"] = f_id
-        payload["caption"] = txt
-        await call_tg_bot_api("sendVideo", payload)
-    elif m_type == "animation" and f_id:
-        payload["animation"] = f_id
-        payload["caption"] = txt
-        await call_tg_bot_api("sendAnimation", payload)
-    else:
-        payload["text"] = txt
-        payload["disable_web_page_preview"] = True
-        await call_tg_bot_api("sendMessage", payload)
+    await send_welcome_payload(client, message.chat.id, message.from_user, message.chat.title or "Group")
 
 @Client.on_message(filters.command(["resetwelcome"], prefixes=[".", "/"]) & filters.group)
 async def reset_welcome_cmd(client: Client, message: Message):
@@ -292,7 +306,7 @@ async def member_status_update(client: Client, update: ChatMemberUpdated):
         if user.id == bot.id:
             return
         chat_title = update.chat.title or "Group"
-        await send_custom_welcome(client, update.chat.id, user, chat_title)
+        await send_welcome_payload(client, update.chat.id, user, chat_title)
 
 @Client.on_message(filters.new_chat_members & filters.group)
 async def welcome_new_member_msg(client: Client, message: Message):
@@ -301,5 +315,5 @@ async def welcome_new_member_msg(client: Client, message: Message):
         if user.id == bot.id:
             continue
         chat_title = message.chat.title or "Group"
-        await send_custom_welcome(client, message.chat.id, user, chat_title)
-    
+        await send_welcome_payload(client, message.chat.id, user, chat_title)
+        
