@@ -5,8 +5,8 @@ import time
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.types import Message, ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
+from database import get_welcome_db, set_welcome_db, toggle_welcome_db, reset_welcome_db
 
-welcome_data = {}
 # Deduplication map: {f"{chat_id}_{user_id}": last_welcome_timestamp}
 recent_welcomes = {}
 
@@ -18,7 +18,6 @@ DEFAULT_WELCOME = (
     "💬 Group rules follow karein aur chill karein!</blockquote>"
 )
 
-# Cute & Aesthetic Emoji Palette from Bestie vibes
 AESTHETIC_EMOJIS = [
     "🌸", "🎀", "🧸", "🌷", "✨", "🍓", "🍧", "🍒", "💐", "🤍", 
     "🍰", "🩰", "🍬", "🦋", "🫧", "🍯", "🕊️", "🥞", "🍭", "💫"
@@ -112,7 +111,6 @@ def apply_template_tags(template: str, user, chat_title: str) -> str:
     return res
 
 async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: str):
-    # Smart Anti-Duplicate Lock: Block duplicate welcome for the same user within 15 seconds
     now = time.time()
     dedup_key = f"{chat_id}_{user.id}"
     if dedup_key in recent_welcomes:
@@ -120,13 +118,18 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
             return
     recent_welcomes[dedup_key] = now
 
-    settings = welcome_data.get(chat_id, {
-        "enabled": True,
-        "type": "text",
-        "file_id": None,
-        "text": DEFAULT_WELCOME,
-        "button_rows": []
-    })
+    # Fetch directly from MongoDB
+    db_data = await get_welcome_db(chat_id)
+    if not db_data:
+        settings = {
+            "enabled": True,
+            "type": "text",
+            "file_id": None,
+            "text": DEFAULT_WELCOME,
+            "button_rows": []
+        }
+    else:
+        settings = db_data
 
     if not settings.get("enabled", True):
         return
@@ -194,13 +197,15 @@ async def set_welcome_msg(client: Client, message: Message):
     cleaned_text, button_rows = parse_buttons(target_text)
     final_text = format_exact_quotes(cleaned_text)
 
-    welcome_data[chat_id] = {
+    # Save permanently to MongoDB Atlas
+    save_payload = {
         "enabled": True,
         "type": media_type,
         "file_id": file_id,
         "text": final_text,
         "button_rows": button_rows
     }
+    await set_welcome_db(chat_id, save_payload)
 
     admin_name = message.from_user.first_name or "Admin"
     btn_count = sum(len(r) for r in button_rows)
@@ -211,7 +216,7 @@ async def set_welcome_msg(client: Client, message: Message):
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
         f"🎬 <b>Media:</b> <code>{media_type.upper()}</code>\n"
         f"🎀 <b>Buttons:</b> <code>{btn_count} Linked (Aesthetic Bestie Pack Active)</code>\n"
-        "⚡ <b>Status:</b> Saved Successfully!</blockquote>"
+        "⚡ <b>Status:</b> Saved permanently to Cloud Database!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
 
@@ -224,8 +229,10 @@ async def toggle_welcome(client: Client, message: Message):
     chat_id = message.chat.id
     args = message.text.split()
 
+    db_data = await get_welcome_db(chat_id)
+    is_on = db_data.get("enabled", True) if db_data else True
+
     if len(args) < 2:
-        is_on = welcome_data.get(chat_id, {}).get("enabled", True)
         curr = "ON 🟢" if is_on else "OFF 🔴"
         return await message.reply_text(
             f"<blockquote>ℹ️ <b>Greetings Status:</b> <code>{curr}</code>\n"
@@ -234,16 +241,13 @@ async def toggle_welcome(client: Client, message: Message):
         )
 
     mode = args[1].lower()
-    if chat_id not in welcome_data:
-        welcome_data[chat_id] = {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "button_rows": []}
-
     admin_name = message.from_user.first_name or "Admin"
 
     if mode in ["on", "enable", "chalu"]:
-        welcome_data[chat_id]["enabled"] = True
+        await toggle_welcome_db(chat_id, True)
         await message.reply_text(f"<blockquote>🟢 <b>Greetings Enabled by {admin_name}!</b></blockquote>", parse_mode=ParseMode.HTML)
     elif mode in ["off", "disable", "band"]:
-        welcome_data[chat_id]["enabled"] = False
+        await toggle_welcome_db(chat_id, False)
         await message.reply_text(f"<blockquote>🔴 <b>Greetings Disabled by {admin_name}!</b></blockquote>", parse_mode=ParseMode.HTML)
 
 # ==================== .getwelcome & .resetwelcome ====================
@@ -257,7 +261,7 @@ async def get_welcome_cmd(client: Client, message: Message):
 async def reset_welcome_cmd(client: Client, message: Message):
     if not message.from_user or not await is_admin(client, message.from_user.id, message.chat.id):
         return
-    welcome_data[message.chat.id] = {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "button_rows": []}
+    await reset_welcome_db(message.chat.id)
     await message.reply_text("<blockquote>🔄 <b>Welcome message reset to default!</b></blockquote>", parse_mode=ParseMode.HTML)
 
 # ==================== Event 1: Manual Approvals / Invite Link Joins ====================
@@ -266,7 +270,6 @@ async def member_status_update(client: Client, update: ChatMemberUpdated):
     old_status = update.old_chat_member.status if update.old_chat_member else None
     new_status = update.new_chat_member.status if update.new_chat_member else None
 
-    # Detects when an admin manually approves a join request OR user joins via invite link
     if old_status in [None, ChatMemberStatus.LEFT, ChatMemberStatus.BANNED] and new_status == ChatMemberStatus.MEMBER:
         bot = await client.get_me()
         user = update.new_chat_member.user
