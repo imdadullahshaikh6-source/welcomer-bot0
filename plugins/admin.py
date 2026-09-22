@@ -29,6 +29,17 @@ def get_target(message):
 def clean_txt(text: str) -> str:
     return re.sub(r'[*_`\[\]()]', '', text or "User")
 
+# Standard empty privileges for clean demote
+DEMOTE_PRIVILEGES = ChatPrivileges(
+    can_manage_chat=False,
+    can_delete_messages=False,
+    can_restrict_members=False,
+    can_invite_users=False,
+    can_pin_messages=False,
+    can_manage_video_chats=False,
+    can_promote_members=False
+)
+
 # ==================== PROMOTE COMMAND ====================
 @Client.on_message(filters.command("promote", prefixes=[".", "/"]) & filters.group)
 async def promote_cmd(client, message):
@@ -97,18 +108,7 @@ async def demote_cmd(client, message):
         await client.promote_chat_member(
             chat_id=message.chat.id,
             user_id=target.id,
-            privileges=ChatPrivileges(
-                can_manage_chat=False,
-                can_delete_messages=False,
-                can_restrict_members=False,
-                can_invite_users=False,
-                can_pin_messages=False,
-                can_manage_video_chats=False,
-                can_promote_members=False,
-                can_post_stories=False,
-                can_edit_stories=False,
-                can_delete_stories=False
-            )
+            privileges=DEMOTE_PRIVILEGES
         )
         admin_name = clean_txt(message.from_user.first_name)
         target_name = clean_txt(target.first_name)
@@ -230,7 +230,7 @@ async def kick_cmd(client, message):
     except Exception as e:
         await message.reply_text(f"❌ Kick error: `{e}`")
 
-# ==================== BUTTON CLICK CALLBACKS (DEMOTE / UNMUTE) ====================
+# ==================== BUTTON CALLBACKS ====================
 @Client.on_callback_query(filters.regex(r"^(demote|unmute|mute)_(\d+)_(\d+)$"))
 async def admin_buttons_callback(client, query: CallbackQuery):
     action, target_id, by_user_id = query.data.split("_")
@@ -238,7 +238,6 @@ async def admin_buttons_callback(client, query: CallbackQuery):
     by_user_id = int(by_user_id)
     caller_id = query.from_user.id
 
-    # Security Check: Sirf wahi admin ya Itachi button press kar sake
     if caller_id != by_user_id and caller_id != ITACHI_ID:
         return await query.answer("❌ Yeh button sirf command dene wale Admin ke liye hai!", show_alert=True)
 
@@ -255,18 +254,7 @@ async def admin_buttons_callback(client, query: CallbackQuery):
             await client.promote_chat_member(
                 chat_id=query.message.chat.id,
                 user_id=target_id,
-                privileges=ChatPrivileges(
-                    can_manage_chat=False,
-                    can_delete_messages=False,
-                    can_restrict_members=False,
-                    can_invite_users=False,
-                    can_pin_messages=False,
-                    can_manage_video_chats=False,
-                    can_promote_members=False,
-                    can_post_stories=False,
-                    can_edit_stories=False,
-                    can_delete_stories=False
-                )
+                privileges=DEMOTE_PRIVILEGES
             )
             updated_text = (
                 "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
@@ -334,4 +322,4 @@ async def admin_buttons_callback(client, query: CallbackQuery):
             await query.answer("✅ User ko wapas mute kar diya gaya!")
         except Exception as e:
             await query.answer(f"Mute failed: {e}", show_alert=True)
-        
+            
