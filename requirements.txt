@@ -3,5 +3,7 @@ tgcrypto
 pillow
 motor
 pymongo
+certifi
+dnspython
 
 
