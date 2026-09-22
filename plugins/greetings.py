@@ -3,11 +3,10 @@ from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
-# Stores: {chat_id: {"enabled": bool, "type": str, "file_id": str, "text": str, "keyboard": InlineKeyboardMarkup}}
 welcome_data = {}
 
 DEFAULT_WELCOME = (
-    "<blockquote>✨ <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙩𝙤 𝙩𝙝𝙚 𝙜𝙧𝙤𝙪𝙥</b> ✨\n"
+    "<blockquote expandable>✨ <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙩𝙤 𝙩𝙝𝙚 𝙜𝙧𝙤𝙪𝙥</b> ✨\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
     "👋 Hello {mention}!\n"
     "🎉 Welcome to <b>{chat}</b>!\n"
@@ -41,7 +40,6 @@ def parse_buttons_and_clean_text(raw_text: str):
         if matches:
             row = []
             for match in matches:
-                # Group 0 & 1 for markdown buttonurl, Group 2 & 3 for pipe format
                 text = match[0] if match[0] else match[2]
                 url = match[1] if match[1] else match[3]
                 row.append(InlineKeyboardButton(text=text.strip(), url=url.strip()))
@@ -53,6 +51,21 @@ def parse_buttons_and_clean_text(raw_text: str):
     cleaned_text = "\n".join(cleaned_lines).rstrip()
     keyboard = InlineKeyboardMarkup(buttons) if buttons else None
     return cleaned_text, keyboard
+
+def format_exact_quotes(html_text: str) -> str:
+    """
+    Pehle blockquote ko collapsible (<blockquote expandable>) rakhta hai,
+    aur baaki sabhi blockquotes ko standard (non-collapse) banata hai.
+    """
+    if not html_text:
+        return ""
+
+    # Sabse pehle saare blockquotes ko clean standard <blockquote> banayein
+    cleaned = re.sub(r'<blockquote[^>]*>', '<blockquote>', html_text)
+
+    # Sirf pehle wale <blockquote> ko <blockquote expandable> banayein
+    result = re.sub(r'<blockquote>', '<blockquote expandable>', cleaned, count=1)
+    return result
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -69,7 +82,6 @@ async def set_welcome_msg(client: Client, message: Message):
     custom_keyboard = None
 
     if reply:
-        # Detect media
         if reply.photo:
             media_type = "photo"
             file_id = reply.photo.file_id
@@ -86,7 +98,6 @@ async def set_welcome_msg(client: Client, message: Message):
             media_type = "text"
             target_text = reply.text.html if reply.text else ""
 
-        # Capture reply markup if already has inline buttons
         if reply.reply_markup and reply.reply_markup.inline_keyboard:
             custom_keyboard = reply.reply_markup
     else:
@@ -96,24 +107,21 @@ async def set_welcome_msg(client: Client, message: Message):
 
     if not target_text and not file_id:
         help_txt = (
-            "<blockquote>⚠️ <b>Format dekhein:</b>\n\n"
-            "Photo, Video ya kisi message par reply karke <code>.setwelcome</code> likhein.\n\n"
-            "<b>Supported Button Formats:</b>\n"
-            "• <code>[Music](buttonurl:https://t.me/...)</code>\n"
-            "• <code>[Help | https://t.me/...]</code>\n\n"
-            "<b>Tags:</b> <code>{mention}</code>, <code>{name}</code>, <code>{chat}</code>, <code>{id}</code></blockquote>"
+            "<blockquote>⚠️ <b>Kisi message/media par reply karke <code>.setwelcome</code> likhein.</b></blockquote>"
         )
         return await message.reply_text(help_txt, parse_mode=ParseMode.HTML)
 
-    # Parse buttons from text if not attached directly to message
     cleaned_text, parsed_keyboard = parse_buttons_and_clean_text(target_text)
+    
+    # Sirf pehla note collapse, doosra note normal
+    final_text = format_exact_quotes(cleaned_text)
     final_keyboard = custom_keyboard or parsed_keyboard
 
     welcome_data[chat_id] = {
         "enabled": True,
         "type": media_type,
         "file_id": file_id,
-        "text": cleaned_text,
+        "text": final_text,
         "keyboard": final_keyboard
     }
 
@@ -122,9 +130,9 @@ async def set_welcome_msg(client: Client, message: Message):
         "<blockquote>🎉 <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙢𝙚𝙨𝙨𝙖𝙜𝙚 𝙨𝙚𝙩</b> 🎉\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
-        f"🖼️ <b>Media:</b> <code>{media_type.capitalize()}</code>\n"
-        f"🔘 <b>Buttons:</b> <code>{'Found' if final_keyboard else 'None'}</code>\n"
-        "⚡ <b>Status:</b> All quotes, custom fonts & media successfully saved!</blockquote>"
+        "✨ <b>Note 1:</b> Collapsible (Expandable)\n"
+        "📖 <b>Note 2:</b> Full Open (No collapse)\n"
+        "⚡ <b>Status:</b> Perfect styling saved!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
 
@@ -215,7 +223,7 @@ async def welcome_new_member(client: Client, message: Message):
         mention = f"<a href='tg://user?id={user.id}'>{first_name}</a>"
         chat_title = message.chat.title or "Group"
 
-        # Replace tags
+        # Tag replacement
         formatted_text = (
             raw_template
             .replace("{mention}", mention)
@@ -235,3 +243,4 @@ async def welcome_new_member(client: Client, message: Message):
                 await message.reply_text(text=formatted_text, reply_markup=keyboard, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         except Exception:
             pass
+            
