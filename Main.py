@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 from pyrogram import Client, idle
 
 API_ID = int(os.environ.get("API_ID", 0))
@@ -19,12 +20,11 @@ app = Client(
 )
 
 async def main():
-    await app.start()
-    bot_info = await app.get_me()
-    print(f"Bot successfully started as @{bot_info.username}!")
-    await idle()
-    await app.stop()
+    async with app:
+        bot_info = await app.get_me()
+        print(f"Bot successfully started as @{bot_info.username}!")
+        await idle()
 
 if __name__ == "__main__":
-    app.run(main())
+    asyncio.run(main())
     
