@@ -1,34 +1,64 @@
 import io
 import json
+import base64
 import urllib.request
 from PIL import Image
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-QUOTLY_URL = "https://quote.yuri.ly/generate"
+QUOTLY_ENDPOINTS = [
+    "https://quote.antispam.bot/generate",
+    "https://quotly.herokuapp.com/generate",
+    "https://quote.yuri.ly/generate"
+]
 
-def generate_quotly(payload: dict) -> io.BytesIO:
+def generate_quotly_sticker(payload: dict) -> io.BytesIO:
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        QUOTLY_URL,
-        data=data,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0"
-        }
-    )
-    with urllib.request.urlopen(req, timeout=15) as response:
-        raw_bytes = response.read()
+    raw_response = None
 
-    # Image ko Telegram sticker dimensions (max 512x512) ke according strictly format karein
-    img = Image.open(io.BytesIO(raw_bytes))
+    # Working endpoint se fetch karein
+    for url in QUOTLY_ENDPOINTS:
+        try:
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status == 200:
+                    raw_response = resp.read()
+                    break
+        except Exception:
+            continue
+
+    if not raw_response:
+        raise Exception("Quotly server filhaal respond nahi kar raha hai.")
+
+    # Check karein agar response JSON format me base64 hai
+    image_bytes = None
+    try:
+        res_json = json.loads(raw_response.decode("utf-8"))
+        if "result" in res_json and "image" in res_json["result"]:
+            image_bytes = base64.b64decode(res_json["result"]["image"])
+    except Exception:
+        # Direct binary image response
+        image_bytes = raw_response
+
+    if not image_bytes:
+        raise Exception("Invalid image data received.")
+
+    # Pillow ke sath proper 512x512 Telegram sticker format me compress karein
+    img = Image.open(io.BytesIO(image_bytes))
     img.thumbnail((512, 512))
 
-    sticker_bio = io.BytesIO()
-    sticker_bio.name = "sticker.webp"
-    img.save(sticker_bio, format="WEBP")
-    sticker_bio.seek(0)
-    return sticker_bio
+    bio = io.BytesIO()
+    bio.name = "sticker.webp"
+    img.save(bio, format="WEBP")
+    bio.seek(0)
+    return bio
 
 @Client.on_message(filters.command(["q", "quote"], prefixes=[".", "/"]) & filters.group)
 async def quotly_cmd(client: Client, message: Message):
@@ -80,11 +110,11 @@ async def quotly_cmd(client: Client, message: Message):
     }
 
     try:
-        sticker_bio = await client.loop.run_in_executor(None, generate_quotly, payload)
+        sticker_file = await client.loop.run_in_executor(None, generate_quotly_sticker, payload)
 
         await client.send_sticker(
             chat_id=message.chat.id,
-            sticker=sticker_bio,
+            sticker=sticker_file,
             reply_to_message_id=reply.id
         )
     except Exception as e:
