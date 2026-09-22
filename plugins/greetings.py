@@ -5,7 +5,7 @@ import urllib.request
 import re
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
-from pyrogram.types import Message, ChatMemberUpdated
+from pyrogram.types import Message, ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
 
 welcome_data = {}
 
@@ -20,7 +20,6 @@ DEFAULT_WELCOME = (
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Direct Bot API Dispatcher
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -35,8 +34,8 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
             with urllib.request.urlopen(req, timeout=12) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as he:
-            err_msg = he.read().decode("utf-8", errors="ignore")
-            print(f"[BotAPI Error] {err_msg}")
+            err = he.read().decode("utf-8", errors="ignore")
+            print(f"[BotAPI HTTP {he.code}] {err}")
             return None
         except Exception as e:
             print(f"[BotAPI Conn Error] {e}")
@@ -52,7 +51,7 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
         return False
 
 # Distinct Color List: 1st Blue (primary), 2nd Red (danger), 3rd Green (success)
-COLOR_CYCLE = ["primary", "danger", "success"]
+PALETTE = ["primary", "danger", "success"]
 
 def parse_buttons_and_clean_text(raw_text: str):
     if not raw_text:
@@ -61,21 +60,24 @@ def parse_buttons_and_clean_text(raw_text: str):
     buttons = []
     lines = raw_text.split("\n")
     cleaned_lines = []
-    btn_idx = 0
+    btn_count = 0
 
-    pattern = re.compile(
-        r"\[([^\[\]\(\)\|]+?)(?:\||\))(?:\s*)(https?://[^\s\|\]\)]+)(?:(?:\s*\|\s*)([a-zA-Z]+))?\]?"
-    )
+    # Handles:
+    # 1. [Text](buttonurl:https://link)
+    # 2. [Text](https://link)
+    # 3. [Text | https://link]
+    # 4. [Text | https://link | color]
+    btn_pattern = re.compile(r"\[([^\[\]\(\)\|]+)\](?:\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\|\s*(https?://[^\[\]\|\s]+)(?:\s*\|\s*([a-zA-Z]+))?\])")
 
     for line in lines:
         if "[" in line and "http" in line:
-            matches = pattern.findall(line)
+            matches = btn_pattern.findall(line)
             if matches:
                 row = []
                 for m in matches:
                     text = m[0].strip()
-                    url = m[1].strip()
-                    custom_color = m[2].strip().lower() if m[2] else ""
+                    url = m[1].strip() if m[1] else m[2].strip()
+                    custom_color = (m[3] or "").strip().lower()
 
                     if custom_color in ["blue", "primary"]:
                         style = "primary"
@@ -84,15 +86,11 @@ def parse_buttons_and_clean_text(raw_text: str):
                     elif custom_color in ["green", "success"]:
                         style = "success"
                     else:
-                        # Auto-assign alternating distinct color per button
-                        style = COLOR_CYCLE[btn_idx % len(COLOR_CYCLE)]
-                        btn_idx += 1
+                        # Auto distinct colors: 1st Blue, 2nd Red, 3rd Green
+                        style = PALETTE[btn_count % len(PALETTE)]
+                        btn_count += 1
 
-                    row.append({
-                        "text": text,
-                        "url": url,
-                        "style": style
-                    })
+                    row.append({"text": text, "url": url, "style": style})
                 if row:
                     buttons.append(row)
                     continue
@@ -153,7 +151,7 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
 
     formatted_text = apply_template_tags(raw_template, user, chat_title)
 
-    # 1. First Attempt: Send via Bot API for Official Button Colors
+    # 1. Send via Telegram Bot API (Native color buttons)
     payload = {"chat_id": chat_id, "parse_mode": "HTML"}
     if keyboard:
         payload["reply_markup"] = keyboard
@@ -178,13 +176,12 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
         if res and res.get("ok"):
             sent_ok = True
 
-    # 2. Pyrogram Native Fallback if Bot API rejects custom file_id
+    # 2. Pyrogram Fallback
     if not sent_ok:
-        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
         fallback_markup = None
         if keyboard and "inline_keyboard" in keyboard:
             fallback_buttons = [
-                [InlineKeyboardButton(text=btn["text"], url=btn["url"]) for btn in row]
+                [InlineKeyboardButton(text=b["text"], url=b["url"]) for b in row]
                 for row in keyboard["inline_keyboard"]
             ]
             if fallback_buttons:
@@ -270,12 +267,14 @@ async def set_welcome_msg(client: Client, message: Message):
     }
 
     admin_name = message.from_user.first_name or "Admin"
+    btn_count = sum(len(r) for r in parsed_keyboard["inline_keyboard"]) if parsed_keyboard else 0
+
     preview = (
         "<blockquote>🎉 <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙢𝙚𝙨𝙨𝙖𝙜𝙚 𝙨𝙚𝙩</b> 🎉\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
         f"🖼️ <b>Media:</b> <code>{media_type.upper()}</code>\n"
-        "🎨 <b>Buttons:</b> Multi-Color Engine (Blue / Red / Green) Ready!\n"
+        f"🎨 <b>Buttons Detected:</b> <code>{btn_count}</code> (Blue / Red Auto-Assigned)\n"
         "⚡ <b>Status:</b> Saved Successfully!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
@@ -347,4 +346,4 @@ async def welcome_new_member_msg(client: Client, message: Message):
             continue
         chat_title = message.chat.title or "Group"
         await send_welcome_payload(client, message.chat.id, user, chat_title)
-                                   
+    
