@@ -5,10 +5,10 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQ
 START_TEXT = """<blockquote>👑 <b>Hello {mention}</b>
 
 Main aapka <b>All-in-One Group Manager Bot</b> hoon.
-Groups ko manage karne, join requests auto-accept karne,
-aur text ko stickers me badalne ke liye tayar hoon!
+Groups ko manage karne, join requests handle karne,
+aur chat environment ko smooth rakhne ke liye tayar hoon!
 
-Niche diye gaye menu se mere features check karein:</blockquote>"""
+Niche diye gaye buttons par click karke features check karein:</blockquote>"""
 
 ADMIN_TEXT = """<blockquote>🛡️ <b>Admin Commands & Features:</b>
 
@@ -19,12 +19,19 @@ ADMIN_TEXT = """<blockquote>🛡️ <b>Admin Commands & Features:</b>
 • <code>.ban</code> - Permanently ban karein
 • <code>.kick</code> - Group se kick karein</blockquote>"""
 
+PIN_TEXT = """<blockquote>📌 <b>Pin & Unpin Management:</b>
+
+• <code>.pin</code> - Reply kiye message ko silently pin karein (with Quick Unpin Button)
+• <code>.pin loud</code> - Message pin karein sabhi members ko alert/notification bhej kar
+• <code>.unpin</code> - Pinned message par reply karke unpin karein
+• <code>.unpinall</code> - Chat ke saare pinned messages ek sath clear karein</blockquote>"""
+
 AFK_TEXT = """<blockquote>💤 <b>AFK (Away From Keyboard) System:</b>
 
 • <code>.afk &lt;reason&gt;</code> - AFK status set karein
 • Group ke sabhi members ke liye fully functional
 • Mention ya reply karne par bot instant notice dega
-• Wapas aane par automatically disable ho jayega</blockquote>"""
+• Wapas message karne par automatically disable ho jayega</blockquote>"""
 
 WELCOMER_TEXT = """<blockquote>✨ <b>Join Welcomer & Automation:</b>
 
@@ -33,21 +40,15 @@ WELCOMER_TEXT = """<blockquote>✨ <b>Join Welcomer & Automation:</b>
 • <code>.start</code> - Welcomer automation on karein
 • <code>.stop</code> - Welcomer automation pause karein</blockquote>"""
 
-QUOTE_TEXT = """<blockquote>🎨 <b>Quotly Sticker Generator:</b>
-
-• <code>.q</code> ya <code>/q</code> - Kisi bhi text message par reply karke stylish Quotly sticker banayein!
-• Sender ka profile photo, name aur text ek round aesthetic sticker ban jayega.
-• Group ka koi bhi member is feature ka use kar sakta hai.</blockquote>"""
-
 def start_keyboard(bot_username: str):
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("🛡️ Admin Features", callback_data="help_admin"),
-            InlineKeyboardButton("💤 AFK System", callback_data="help_afk")
+            InlineKeyboardButton("📌 Pin System", callback_data="help_pin")
         ],
         [
-            InlineKeyboardButton("✨ Join Welcomer", callback_data="help_welcomer"),
-            InlineKeyboardButton("🎨 Quote Sticker", callback_data="help_quote")
+            InlineKeyboardButton("💤 AFK System", callback_data="help_afk"),
+            InlineKeyboardButton("✨ Join Welcomer", callback_data="help_welcomer")
         ],
         [
             InlineKeyboardButton("➕ Add Me To Your Group", url=f"https://t.me/{bot_username}?startgroup=true")
@@ -76,12 +77,12 @@ async def callback_handler(client, query: CallbackQuery):
 
     if data == "help_admin":
         await query.message.edit_text(text=ADMIN_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
+    elif data == "help_pin":
+        await query.message.edit_text(text=PIN_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_afk":
         await query.message.edit_text(text=AFK_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_welcomer":
         await query.message.edit_text(text=WELCOMER_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
-    elif data == "help_quote":
-        await query.message.edit_text(text=QUOTE_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_back":
         await query.message.edit_text(
             text=START_TEXT.format(mention=mention),
