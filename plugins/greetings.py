@@ -20,7 +20,7 @@ DEFAULT_WELCOME = (
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Standard Bot API JSON Call
+# Direct Bot API Dispatcher
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -32,50 +32,14 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
 
     def _sync():
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=12) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as he:
-            err = he.read().decode("utf-8", errors="ignore")
-            print(f"[BotAPI HTTP {he.code}] {err}")
+            err_msg = he.read().decode("utf-8", errors="ignore")
+            print(f"[BotAPI Error] {err_msg}")
             return None
         except Exception as e:
-            print(f"[BotAPI Error] {e}")
-            return None
-
-    return await asyncio.to_thread(_sync)
-
-# Multipart Upload for Photos/Media so Bot API gets native file & styles
-async def upload_tg_bot_api(endpoint: str, fields: dict, file_field: str, filename: str, file_data: bytes):
-    token = get_token()
-    if not token:
-        return None
-
-    boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
-    body = bytearray()
-
-    for key, val in fields.items():
-        if val is None:
-            continue
-        body.extend(f"--{boundary}\r\n".encode())
-        body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode())
-        body.extend(f"{val}\r\n".encode())
-
-    body.extend(f"--{boundary}\r\n".encode())
-    body.extend(f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'.encode())
-    body.extend(b"Content-Type: application/octet-stream\r\n\r\n")
-    body.extend(file_data)
-    body.extend(b"\r\n")
-    body.extend(f"--{boundary}--\r\n".encode())
-
-    url = f"https://api.telegram.org/bot{token}/{endpoint}"
-    req = urllib.request.Request(url, data=bytes(body), headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
-
-    def _sync():
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except Exception as e:
-            print(f"[BotAPI Multipart Error] {e}")
+            print(f"[BotAPI Conn Error] {e}")
             return None
 
     return await asyncio.to_thread(_sync)
@@ -87,8 +51,8 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
     except Exception:
         return False
 
-# Distinct Color Rotation: 1st Blue, 2nd Red, 3rd Green
-PALETTE = ["primary", "danger", "success"]
+# Distinct Color List: 1st Blue (primary), 2nd Red (danger), 3rd Green (success)
+COLOR_CYCLE = ["primary", "danger", "success"]
 
 def parse_buttons_and_clean_text(raw_text: str):
     if not raw_text:
@@ -97,37 +61,43 @@ def parse_buttons_and_clean_text(raw_text: str):
     buttons = []
     lines = raw_text.split("\n")
     cleaned_lines = []
-    button_counter = 0
+    btn_idx = 0
 
-    btn_regex = re.compile(
-        r"\[([^\[\]\(\)]+?)\](?:\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|(?:\|\s*(https?://[^\[\]\|\s]+)(?:\s*\|\s*([a-zA-Z]+))?))"
+    pattern = re.compile(
+        r"\[([^\[\]\(\)\|]+?)(?:\||\))(?:\s*)(https?://[^\s\|\]\)]+)(?:(?:\s*\|\s*)([a-zA-Z]+))?\]?"
     )
 
     for line in lines:
-        matches = btn_regex.findall(line)
-        if matches:
-            row = []
-            for m in matches:
-                text = m[0].strip()
-                url = m[1].strip() if m[1] else m[2].strip()
-                color_raw = (m[3] or "").strip().lower()
+        if "[" in line and "http" in line:
+            matches = pattern.findall(line)
+            if matches:
+                row = []
+                for m in matches:
+                    text = m[0].strip()
+                    url = m[1].strip()
+                    custom_color = m[2].strip().lower() if m[2] else ""
 
-                if color_raw in ["blue", "primary"]:
-                    style = "primary"
-                elif color_raw in ["red", "danger"]:
-                    style = "danger"
-                elif color_raw in ["green", "success"]:
-                    style = "success"
-                else:
-                    # Alternating colors: each button gets a unique distinct color!
-                    style = PALETTE[button_counter % len(PALETTE)]
-                    button_counter += 1
+                    if custom_color in ["blue", "primary"]:
+                        style = "primary"
+                    elif custom_color in ["red", "danger"]:
+                        style = "danger"
+                    elif custom_color in ["green", "success"]:
+                        style = "success"
+                    else:
+                        # Auto-assign alternating distinct color per button
+                        style = COLOR_CYCLE[btn_idx % len(COLOR_CYCLE)]
+                        btn_idx += 1
 
-                row.append({"text": text, "url": url, "style": style})
-            if row:
-                buttons.append(row)
-        else:
-            cleaned_lines.append(line)
+                    row.append({
+                        "text": text,
+                        "url": url,
+                        "style": style
+                    })
+                if row:
+                    buttons.append(row)
+                    continue
+
+        cleaned_lines.append(line)
 
     cleaned_text = "\n".join(cleaned_lines).rstrip()
     keyboard = {"inline_keyboard": buttons} if buttons else None
@@ -169,7 +139,6 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
         "enabled": True,
         "type": "text",
         "file_id": None,
-        "bot_api_file_id": None,
         "text": DEFAULT_WELCOME,
         "keyboard": None
     })
@@ -181,72 +150,73 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
     keyboard = settings.get("keyboard")
     m_type = settings.get("type", "text")
     f_id = settings.get("file_id")
-    bot_api_f_id = settings.get("bot_api_file_id")
 
     formatted_text = apply_template_tags(raw_template, user, chat_title)
 
+    # 1. First Attempt: Send via Bot API for Official Button Colors
     payload = {"chat_id": chat_id, "parse_mode": "HTML"}
     if keyboard:
         payload["reply_markup"] = keyboard
 
-    # 1. If Photo with cached Bot API file_id
-    if m_type == "photo":
-        if bot_api_f_id:
-            payload["photo"] = bot_api_f_id
-            payload["caption"] = formatted_text
-            res = await call_tg_bot_api("sendPhoto", payload)
-            if res and res.get("ok"):
-                return
-        # If Bot API file_id is not yet cached, download via Pyrogram & upload to Bot API
-        elif f_id:
-            try:
-                dl_path = await client.download_media(f_id)
-                if dl_path and os.path.exists(dl_path):
-                    with open(dl_path, "rb") as f:
-                        f_bytes = f.read()
-                    try:
-                        os.remove(dl_path)
-                    except Exception:
-                        pass
-                    
-                    fields = {
-                        "chat_id": str(chat_id),
-                        "caption": formatted_text,
-                        "parse_mode": "HTML"
-                    }
-                    if keyboard:
-                        fields["reply_markup"] = json.dumps(keyboard)
-
-                    res = await upload_tg_bot_api("sendPhoto", fields, "photo", "welcome.jpg", f_bytes)
-                    if res and res.get("ok"):
-                        # Cache the Bot API file_id for all future requests
-                        welcome_data[chat_id]["bot_api_file_id"] = res["result"]["photo"][-1]["file_id"]
-                        return
-            except Exception as e:
-                print(f"[Download/Upload fallback error]: {e}")
-
-    # 2. Text Message
+    sent_ok = False
+    if m_type == "photo" and f_id:
+        payload["photo"] = f_id
+        payload["caption"] = formatted_text
+        res = await call_tg_bot_api("sendPhoto", payload)
+        if res and res.get("ok"):
+            sent_ok = True
+    elif m_type == "video" and f_id:
+        payload["video"] = f_id
+        payload["caption"] = formatted_text
+        res = await call_tg_bot_api("sendVideo", payload)
+        if res and res.get("ok"):
+            sent_ok = True
     elif m_type == "text":
         payload["text"] = formatted_text
         payload["disable_web_page_preview"] = True
         res = await call_tg_bot_api("sendMessage", payload)
         if res and res.get("ok"):
-            return
+            sent_ok = True
 
-    # 3. Bulletproof Fallback via Pyrogram so message NEVER gets dropped
-    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-    fallback_markup = None
-    if keyboard and "inline_keyboard" in keyboard:
-        fallback_rows = []
-        for row in keyboard["inline_keyboard"]:
-            fallback_rows.append([InlineKeyboardButton(text=btn["text"], url=btn["url"]) for btn in row if "url" in btn])
-        if any(fallback_rows):
-            fallback_markup = InlineKeyboardMarkup(fallback_rows)
+    # 2. Pyrogram Native Fallback if Bot API rejects custom file_id
+    if not sent_ok:
+        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        fallback_markup = None
+        if keyboard and "inline_keyboard" in keyboard:
+            fallback_buttons = [
+                [InlineKeyboardButton(text=btn["text"], url=btn["url"]) for btn in row]
+                for row in keyboard["inline_keyboard"]
+            ]
+            if fallback_buttons:
+                fallback_markup = InlineKeyboardMarkup(fallback_buttons)
 
-    if m_type == "photo" and f_id:
-        await client.send_photo(chat_id=chat_id, photo=f_id, caption=formatted_text, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
-    else:
-        await client.send_message(chat_id=chat_id, text=formatted_text, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=fallback_markup)
+        try:
+            if m_type == "photo" and f_id:
+                await client.send_photo(
+                    chat_id=chat_id,
+                    photo=f_id,
+                    caption=formatted_text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=fallback_markup
+                )
+            elif m_type == "video" and f_id:
+                await client.send_video(
+                    chat_id=chat_id,
+                    video=f_id,
+                    caption=formatted_text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=fallback_markup
+                )
+            else:
+                await client.send_message(
+                    chat_id=chat_id,
+                    text=formatted_text,
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True,
+                    reply_markup=fallback_markup
+                )
+        except Exception as e:
+            print(f"[Fallback error]: {e}")
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -284,45 +254,17 @@ async def set_welcome_msg(client: Client, message: Message):
 
     if not target_text and not file_id:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>Kisi message/media par reply karke <code>.setwelcome</code> likhein.</b></blockquote>",
+            "<blockquote>⚠️ <b>Kisi photo/caption par reply karke <code>.setwelcome</code> karein!</b></blockquote>",
             parse_mode=ParseMode.HTML
         )
 
     cleaned_text, parsed_keyboard = parse_buttons_and_clean_text(target_text)
     final_text = format_exact_quotes(cleaned_text)
 
-    # Immediately cache downloaded bytes and upload to Bot API to obtain real Bot API file_id
-    bot_api_file_id = None
-    if media_type == "photo" and reply and reply.photo:
-        try:
-            dl_path = await client.download_media(reply.photo)
-            if dl_path and os.path.exists(dl_path):
-                with open(dl_path, "rb") as f:
-                    f_bytes = f.read()
-                try:
-                    os.remove(dl_path)
-                except Exception:
-                    pass
-
-                fields = {
-                    "chat_id": str(chat_id),
-                    "caption": "<blockquote>✨ <b>Preview Welcome Message</b></blockquote>",
-                    "parse_mode": "HTML"
-                }
-                if parsed_keyboard:
-                    fields["reply_markup"] = json.dumps(parsed_keyboard)
-
-                test_res = await upload_tg_bot_api("sendPhoto", fields, "photo", "welcome.jpg", f_bytes)
-                if test_res and test_res.get("ok"):
-                    bot_api_file_id = test_res["result"]["photo"][-1]["file_id"]
-        except Exception as e:
-            print(f"[Initial Media Upload Error]: {e}")
-
     welcome_data[chat_id] = {
         "enabled": True,
         "type": media_type,
         "file_id": file_id,
-        "bot_api_file_id": bot_api_file_id,
         "text": final_text,
         "keyboard": parsed_keyboard
     }
@@ -332,8 +274,9 @@ async def set_welcome_msg(client: Client, message: Message):
         "<blockquote>🎉 <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙢𝙚𝙨𝙨𝙖𝙜𝙚 𝙨𝙚𝙩</b> 🎉\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
+        f"🖼️ <b>Media:</b> <code>{media_type.upper()}</code>\n"
         "🎨 <b>Buttons:</b> Multi-Color Engine (Blue / Red / Green) Ready!\n"
-        "⚡ <b>Status:</b> Custom Welcome Saved & Verified!</blockquote>"
+        "⚡ <b>Status:</b> Saved Successfully!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
 
@@ -357,7 +300,7 @@ async def toggle_welcome(client: Client, message: Message):
 
     mode = args[1].lower()
     if chat_id not in welcome_data:
-        welcome_data[chat_id] = {"enabled": True, "type": "text", "file_id": None, "bot_api_file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
+        welcome_data[chat_id] = {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
 
     admin_name = message.from_user.first_name or "Admin"
 
@@ -379,7 +322,7 @@ async def get_welcome_cmd(client: Client, message: Message):
 async def reset_welcome_cmd(client: Client, message: Message):
     if not message.from_user or not await is_admin(client, message.from_user.id, message.chat.id):
         return
-    welcome_data[message.chat.id] = {"enabled": True, "type": "text", "file_id": None, "bot_api_file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
+    welcome_data[message.chat.id] = {"enabled": True, "type": "text", "file_id": None, "text": DEFAULT_WELCOME, "keyboard": None}
     await message.reply_text("<blockquote>🔄 <b>Welcome message reset to default!</b></blockquote>", parse_mode=ParseMode.HTML)
 
 # ==================== Member Join Handlers ====================
@@ -404,4 +347,4 @@ async def welcome_new_member_msg(client: Client, message: Message):
             continue
         chat_title = message.chat.title or "Group"
         await send_welcome_payload(client, message.chat.id, user, chat_title)
-        
+                                   
