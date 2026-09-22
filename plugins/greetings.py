@@ -5,9 +5,10 @@ import urllib.request
 import re
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
-from pyrogram.types import Message, ChatMemberUpdated
+from pyrogram.types import Message, ChatMemberUpdated, CallbackQuery
 
 welcome_data = {}
+link_store = {}
 
 DEFAULT_WELCOME = (
     "<blockquote expandable>✨ <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙩𝙤 𝙩𝙝𝙚 𝙜𝙧𝙤𝙪𝙥</b> ✨\n"
@@ -20,7 +21,6 @@ DEFAULT_WELCOME = (
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Exact Bot API Dispatcher used in DM /start
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -39,7 +39,7 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
             print(f"[BotAPI HTTP {he.code}] {err}")
             return None
         except Exception as e:
-            print(f"[BotAPI Error] {e}")
+            print(f"[BotAPI Conn Error] {e}")
             return None
 
     return await asyncio.to_thread(_sync)
@@ -51,10 +51,10 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
     except Exception:
         return False
 
-# DM style alternating palette: 1st Blue (primary), 2nd Red (danger), 3rd Green (success)
-COLOR_PALETTE = ["primary", "danger", "success"]
+# 1st button: Primary (Blue), 2nd button: Danger (Red), 3rd button: Success (Green)
+PALETTE = ["primary", "danger", "success"]
 
-def parse_buttons(raw_text: str):
+def parse_buttons(raw_text: str, chat_id: int):
     if not raw_text:
         return "", None
 
@@ -74,12 +74,17 @@ def parse_buttons(raw_text: str):
             for m in matches:
                 title = m[0].strip()
                 url = m[1].strip() if m[1] else m[2].strip()
-                # Apply exact DM styled colored buttons
-                assigned_style = COLOR_PALETTE[btn_count % len(COLOR_PALETTE)]
+
+                assigned_style = PALETTE[btn_count % len(PALETTE)]
                 btn_count += 1
+
+                # Save link to trigger via callback (which allows true color rendering!)
+                cb_data = f"lnk_{abs(chat_id)}_{btn_count}"
+                link_store[cb_data] = {"title": title, "url": url}
+
                 row.append({
                     "text": title,
-                    "url": url,
+                    "callback_data": cb_data,
                     "style": assigned_style
                 })
             if row:
@@ -148,7 +153,6 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
     if keyboard:
         payload["reply_markup"] = keyboard
 
-    # Send directly via Telegram Bot API HTTP Call (exact DM style)
     if m_type == "photo" and f_id:
         payload["photo"] = f_id
         payload["caption"] = caption
@@ -166,24 +170,23 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
         payload["disable_web_page_preview"] = True
         res = await call_tg_bot_api("sendMessage", payload)
 
-    # Secondary Pyrogram fallback only if Bot API fails completely
+    # Pyrogram fallback
     if not (res and res.get("ok")):
-        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        fallback_markup = None
-        if keyboard and "inline_keyboard" in keyboard:
-            fallback_buttons = [
-                [InlineKeyboardButton(text=b["text"], url=b["url"]) for b in row]
-                for row in keyboard["inline_keyboard"]
-            ]
-            if fallback_buttons:
-                fallback_markup = InlineKeyboardMarkup(fallback_buttons)
-
         if m_type == "photo" and f_id:
-            await client.send_photo(chat_id=chat_id, photo=f_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
+            await client.send_photo(chat_id=chat_id, photo=f_id, caption=caption, parse_mode=ParseMode.HTML)
         elif m_type in ["video", "animation"] and f_id:
-            await client.send_video(chat_id=chat_id, video=f_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=fallback_markup)
+            await client.send_video(chat_id=chat_id, video=f_id, caption=caption, parse_mode=ParseMode.HTML)
         else:
-            await client.send_message(chat_id=chat_id, text=caption, parse_mode=ParseMode.HTML, disable_web_page_preview=True, reply_markup=fallback_markup)
+            await client.send_message(chat_id=chat_id, text=caption, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+# ==================== Callback Link Opener ====================
+@Client.on_callback_query(filters.regex(r"^lnk_"))
+async def open_linked_button(client: Client, query: CallbackQuery):
+    data = link_store.get(query.data)
+    if not data:
+        return await query.answer("🔗 Link expired! Please re-send .setwelcome.", show_alert=True)
+    # Opens link directly on user device with confirmation
+    await query.answer(url=data["url"])
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -225,7 +228,7 @@ async def set_welcome_msg(client: Client, message: Message):
             parse_mode=ParseMode.HTML
         )
 
-    cleaned_text, parsed_keyboard = parse_buttons(target_text)
+    cleaned_text, parsed_keyboard = parse_buttons(target_text, chat_id)
     final_text = format_exact_quotes(cleaned_text)
 
     welcome_data[chat_id] = {
@@ -244,7 +247,7 @@ async def set_welcome_msg(client: Client, message: Message):
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
         f"🎬 <b>Media:</b> <code>{media_type.upper()}</code>\n"
-        f"🎨 <b>Colored Buttons:</b> <code>{btn_count} Linked (Blue & Red)</code>\n"
+        f"🎨 <b>Colored Buttons:</b> <code>{btn_count} Buttons (Blue &amp; Red)</code>\n"
         "⚡ <b>Status:</b> Saved Successfully!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
