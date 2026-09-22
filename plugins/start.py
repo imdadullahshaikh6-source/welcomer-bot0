@@ -1,7 +1,12 @@
+import os
+import json
 import asyncio
+import urllib.request
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import Message, CallbackQuery
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
 START_TEXT = """<blockquote>👑 <b>Hello {mention}</b>
 
@@ -9,7 +14,14 @@ Main aapka <b>All-in-One Group Manager Bot</b> hoon.
 Groups ko manage karne, custom greetings dene,
 aur chat environment ko smooth rakhne ke liye tayar hoon!
 
-Niche diye gaye buttons par click karke features explore karein:</blockquote>"""
+👑 <b>𝙊𝙒𝙉𝙀𝙍:</b> @Ownerback
+
+Niche diye gaye buttons se explore karein:</blockquote>"""
+
+COMMANDS_MENU_TEXT = """<blockquote>⚡ <b>All Features & Modules:</b>
+
+Aapko jis module ke baare me janna hai,
+niche diye gaye button par click karein:</blockquote>"""
 
 ADMIN_TEXT = """<blockquote>🛡️ <b>Admin Commands & Features:</b>
 
@@ -53,33 +65,66 @@ REQUEST_TEXT = """<blockquote>📥 <b>Auto Request Accept System:</b>
 • <code>.requestaccept on</code> - Auto accept chalu karein.
 • <code>.requestaccept off</code> - Auto accept band karein.</blockquote>"""
 
-def get_start_markup(bot_username: str):
+async def call_tg_bot_api(endpoint: str, payload: dict):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{endpoint}"
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+
+    def _sync_post():
+        try:
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as err:
+            print(f"[BotAPI Error] {err}")
+            return None
+
+    return await asyncio.to_thread(_sync_post)
+
+# 1. Main Home Menu (Exactly 3 Buttons)
+def get_home_keyboard(bot_username: str):
     return {
         "inline_keyboard": [
-            [{"text": "⚡ Commands", "callback_data": "help_admin", "style": "success"}],
+            [{"text": "⚡ 𝘾𝙊𝙈𝙈𝘼𝙉𝘿𝙎", "callback_data": "menu_commands", "style": "success"}],
             [
-                {"text": "📌 Pin System", "callback_data": "help_pin", "style": "success"},
-                {"text": "🎉 Greetings", "callback_data": "help_greetings", "style": "success"}
-            ],
-            [
-                {"text": "🎨 Quotes", "callback_data": "help_quote", "style": "success"},
-                {"text": "💤 AFK System", "callback_data": "help_afk", "style": "success"}
-            ],
-            [{"text": "📥 Request Accept", "callback_data": "help_request", "style": "success"}],
-            [{"text": "✨ Add Me", "url": f"https://t.me/{bot_username}?startgroup=true", "style": "success"}]
+                {"text": "👑 𝙊𝙒𝙉𝙀𝙍", "url": "https://t.me/Ownerback", "style": "success"},
+                {"text": "✨ 𝘼𝘿𝘿 𝙈𝙀", "url": f"https://t.me/{bot_username}?startgroup=true", "style": "success"}
+            ]
         ]
     }
 
-BACK_MARKUP = {
-    "inline_keyboard": [
-        [{"text": "« Back", "callback_data": "help_back", "style": "success"}]
-    ]
-}
+# 2. Commands Sub-Menu
+def get_commands_keyboard():
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "🛡️ Admin Control", "callback_data": "help_admin", "style": "success"},
+                {"text": "📌 Pin System", "callback_data": "help_pin", "style": "success"}
+            ],
+            [
+                {"text": "🎉 Greetings", "callback_data": "help_greetings", "style": "success"},
+                {"text": "🎨 Quotes", "callback_data": "help_quote", "style": "success"}
+            ],
+            [
+                {"text": "💤 AFK System", "callback_data": "help_afk", "style": "success"},
+                {"text": "📥 Request Accept", "callback_data": "help_request", "style": "success"}
+            ],
+            [
+                {"text": "« Back To Home", "callback_data": "menu_home", "style": "success"}
+            ]
+        ]
+    }
 
-# ==================== PRIVATE /start (With Flame Reaction) ====================
+# 3. Detail Back Button
+def get_back_to_commands_keyboard():
+    return {
+        "inline_keyboard": [
+            [{"text": "« Back to Commands", "callback_data": "menu_commands", "style": "success"}]
+        ]
+    }
+
+# ==================== PRIVATE /start ====================
 @Client.on_message(filters.command("start", prefixes=[".", "/"]) & filters.private)
 async def private_start(client: Client, message: Message):
-    # Send Flame / Fire reaction to user's /start message
     try:
         await client.send_reaction(
             chat_id=message.chat.id,
@@ -92,27 +137,13 @@ async def private_start(client: Client, message: Message):
     bot = await client.get_me()
     mention = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.first_name}</a>"
 
-    try:
-        await client.send_message(
-            chat_id=message.chat.id,
-            text=START_TEXT.format(mention=mention),
-            reply_markup=get_start_markup(bot.username),
-            parse_mode=ParseMode.HTML
-        )
-    except Exception:
-        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        fallback_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("⚡ Commands", callback_data="help_admin")],
-            [InlineKeyboardButton("📌 Pin", callback_data="help_pin"), InlineKeyboardButton("🎉 Greetings", callback_data="help_greetings")],
-            [InlineKeyboardButton("🎨 Quotes", callback_data="help_quote"), InlineKeyboardButton("💤 AFK", callback_data="help_afk")],
-            [InlineKeyboardButton("📥 Request Accept", callback_data="help_request")],
-            [InlineKeyboardButton("✨ Add Me", url=f"https://t.me/{bot.username}?startgroup=true")]
-        ])
-        await message.reply_text(
-            text=START_TEXT.format(mention=mention),
-            reply_markup=fallback_kb,
-            parse_mode=ParseMode.HTML
-        )
+    payload = {
+        "chat_id": message.chat.id,
+        "text": START_TEXT.format(mention=mention),
+        "parse_mode": "HTML",
+        "reply_markup": get_home_keyboard(bot.username)
+    }
+    await call_tg_bot_api("sendMessage", payload)
 
 # ==================== GROUP INTRO ====================
 @Client.on_message(filters.command("start", prefixes=[".", "/"]) & filters.group)
@@ -134,79 +165,75 @@ async def group_start_intro(client: Client, message: Message):
         "<blockquote>👋 <b>Hey {user_mention}!</b>\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"Main <b>{bot.first_name}</b> hoon, ek modern group management bot!\n\n"
-        "⚡ <b>Quick Features:</b>\n"
-        "• 🛡️ <i>Admin Control (.promote, .demote, .mute, .ban)</i>\n"
-        "• 📌 <i>Pin Management (.pin, .unpin)</i>\n"
-        "• 🎉 <i>Custom Greetings (.setwelcome)</i>\n"
-        "• 🎨 <i>Quote Stickers (.q)</i>\n"
-        "• 💤 <i>AFK System (.afk)</i>\n"
-        "• 📥 <i>Auto Request Accept (.requestaccept)</i>\n\n"
-        "Features dekhne ke liye niche button dabayein.</blockquote>"
+        "👑 <b>Owner:</b> @Ownerback\n\n"
+        "Niche diye gaye buttons se setup karein.</blockquote>"
     ).format(user_mention=user_mention)
 
     group_markup = {
         "inline_keyboard": [
-            [{"text": "💬 Help & Features (PM)", "url": f"https://t.me/{bot.username}?start=help", "style": "success"}],
-            [{"text": "✨ Add Me To Group", "url": f"https://t.me/{bot.username}?startgroup=true", "style": "success"}]
+            [
+                {"text": "💬 Help & Features (PM)", "url": f"https://t.me/{bot.username}?start=help", "style": "success"},
+                {"text": "✨ Add Me To Group", "url": f"https://t.me/{bot.username}?startgroup=true", "style": "success"}
+            ]
         ]
     }
 
-    try:
-        await client.send_message(
-            chat_id=message.chat.id,
-            text=group_text,
-            reply_markup=group_markup,
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True
-        )
-    except Exception:
-        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-        fallback_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💬 Help & Features (PM)", url=f"https://t.me/{bot.username}?start=help")],
-            [InlineKeyboardButton("✨ Add Me To Group", url=f"https://t.me/{bot.username}?startgroup=true")]
-        ])
-        await message.reply_text(
-            text=group_text,
-            reply_markup=fallback_kb,
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True
-        )
+    payload = {
+        "chat_id": message.chat.id,
+        "text": group_text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+        "reply_markup": group_markup
+    }
+    await call_tg_bot_api("sendMessage", payload)
 
-# ==================== CALLBACKS ====================
+# ==================== CALLBACK QUERY ROUTER ====================
 @Client.on_callback_query()
 async def callback_handler(client: Client, query: CallbackQuery):
     data = query.data
     bot = await client.get_me()
     mention = f"<a href='tg://user?id={query.from_user.id}'>{query.from_user.first_name}</a>"
 
-    text = ""
-    markup = BACK_MARKUP
+    new_text = ""
+    new_markup = None
 
-    if data == "help_admin":
-        text = ADMIN_TEXT
+    if data == "menu_home":
+        new_text = START_TEXT.format(mention=mention)
+        new_markup = get_home_keyboard(bot.username)
+    elif data == "menu_commands":
+        new_text = COMMANDS_MENU_TEXT
+        new_markup = get_commands_keyboard()
+    elif data == "help_admin":
+        new_text = ADMIN_TEXT
+        new_markup = get_back_to_commands_keyboard()
     elif data == "help_pin":
-        text = PIN_TEXT
+        new_text = PIN_TEXT
+        new_markup = get_back_to_commands_keyboard()
     elif data == "help_greetings":
-        text = GREETINGS_TEXT
+        new_text = GREETINGS_TEXT
+        new_markup = get_back_to_commands_keyboard()
     elif data == "help_quote":
-        text = QUOTE_TEXT
+        new_text = QUOTE_TEXT
+        new_markup = get_back_to_commands_keyboard()
     elif data == "help_afk":
-        text = AFK_TEXT
+        new_text = AFK_TEXT
+        new_markup = get_back_to_commands_keyboard()
     elif data == "help_request":
-        text = REQUEST_TEXT
-    elif data == "help_back":
-        text = START_TEXT.format(mention=mention)
-        markup = get_start_markup(bot.username)
+        new_text = REQUEST_TEXT
+        new_markup = get_back_to_commands_keyboard()
+
+    if new_text and new_markup:
+        payload = {
+            "chat_id": query.message.chat.id,
+            "message_id": query.message.id,
+            "text": new_text,
+            "parse_mode": "HTML",
+            "reply_markup": new_markup
+        }
+        await call_tg_bot_api("editMessageText", payload)
 
     try:
-        await client.edit_message_text(
-            chat_id=query.message.chat.id,
-            message_id=query.message.id,
-            text=text,
-            reply_markup=markup,
-            parse_mode=ParseMode.HTML
-        )
+        await query.answer()
     except Exception:
         pass
-    await query.answer()
-    
+        
