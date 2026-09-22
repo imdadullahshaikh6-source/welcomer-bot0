@@ -4,12 +4,10 @@ from pyrogram.enums import ParseMode, ChatMemberStatus, MessageEntityType
 from pyrogram.types import (
     Message,
     CallbackQuery,
-    ChatPermissions,
+    ChatPrivileges,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
-
-warn_data = {}
 
 async def get_admin_privileges(client: Client, user_id: int, chat_id: int):
     try:
@@ -58,294 +56,170 @@ def get_user_mention(user):
         return f"<b>{html.escape(user.title)}</b>"
     return "User"
 
-@Client.on_message(filters.command(["ban"], prefixes=[".", "/"]) & filters.group)
-async def ban_command(client: Client, message: Message):
+# ==================== PROMOTE ====================
+@Client.on_message(filters.command(["promote"], prefixes=[".", "/"]) & filters.group)
+async def promote_command(client: Client, message: Message):
     if not message.from_user:
         return
+
     is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
     if not is_adm:
         return
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b>\nAapke paas members ko ban karne ka right nahi hai.</blockquote>", parse_mode=ParseMode.HTML)
+
+    # Check Add Admins Permission
+    if privs != "owner" and not (privs and privs.can_promote_members):
+        return await message.reply_text(
+            "<blockquote>❌ <b>Permission Denied!</b>\n"
+            "Aapke paas new admins promote karne ka right (Add New Admins) nahi hai!</blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
 
     target = await extract_target_user(client, message)
     if not target:
-        return await message.reply_text("<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.ban @username</code></blockquote>", parse_mode=ParseMode.HTML)
+        return await message.reply_text(
+            "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b>\n"
+            "<code>.promote @username &lt;title&gt;</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
 
     bot = await client.get_me()
     if target.id == bot.id:
-        return await message.reply_text("<blockquote>🥺 Main khud ko ban nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
-
-    target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
-    if target_is_adm:
-        return await message.reply_text("<blockquote>❌ <b>Admin ko ban nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    try:
-        await client.ban_chat_member(message.chat.id, target.id)
-        mention = get_user_mention(target)
-        btn = InlineKeyboardMarkup([[InlineKeyboardButton("✨ Unban Member", callback_data=f"adm_unban_{target.id}")]])
-        await message.reply_text(f"<blockquote>🚫 <b>Banned!</b>\n👤 <b>User:</b> {mention}\n⚡ <b>Action:</b> Successfully removed from group.</blockquote>", reply_markup=btn, parse_mode=ParseMode.HTML)
-    except Exception as e:
-        await message.reply_text(f"<blockquote>⚠️ <b>Failed to ban:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
-
-@Client.on_message(filters.command(["unban"], prefixes=[".", "/"]) & filters.group)
-async def unban_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    target = await extract_target_user(client, message)
-    if not target:
-        return await message.reply_text("<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.unban @username</code></blockquote>", parse_mode=ParseMode.HTML)
-
-    try:
-        await client.unban_chat_member(message.chat.id, target.id)
-        mention = get_user_mention(target)
-        await message.reply_text(f"<blockquote>✅ <b>Unbanned!</b>\n👤 <b>User:</b> {mention}\n✨ <b>Status:</b> User wapas join kar sakta hai.</blockquote>", parse_mode=ParseMode.HTML)
-    except Exception as e:
-        await message.reply_text(f"<blockquote>⚠️ <b>Failed to unban:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
-
-@Client.on_message(filters.command(["mute"], prefixes=[".", "/"]) & filters.group)
-async def mute_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b>\nAapke paas mute karne ka right nahi hai.</blockquote>", parse_mode=ParseMode.HTML)
-
-    target = await extract_target_user(client, message)
-    if not target:
-        return await message.reply_text("<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.mute @username</code></blockquote>", parse_mode=ParseMode.HTML)
-
-    bot = await client.get_me()
-    if target.id == bot.id:
-        return await message.reply_text("<blockquote>🥺 Main khud ko mute nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
-
-    target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
-    if target_is_adm:
-        return await message.reply_text("<blockquote>❌ <b>Admin ko mute nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    try:
-        await client.restrict_chat_member(chat_id=message.chat.id, user_id=target.id, permissions=ChatPermissions(can_send_messages=False))
-        mention = get_user_mention(target)
-        btn = InlineKeyboardMarkup([[InlineKeyboardButton("🔊 Unmute Member", callback_data=f"adm_unmute_{target.id}")]])
-        await message.reply_text(f"<blockquote>🤐 <b>Muted!</b>\n👤 <b>User:</b> {mention}\n🔇 <b>Status:</b> Message permissions band kar di gayi hain.</blockquote>", reply_markup=btn, parse_mode=ParseMode.HTML)
-    except Exception as e:
-        await message.reply_text(f"<blockquote>⚠️ <b>Failed to mute:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
-
-@Client.on_message(filters.command(["unmute"], prefixes=[".", "/"]) & filters.group)
-async def unmute_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    target = await extract_target_user(client, message)
-    if not target:
-        return await message.reply_text("<blockquote>⚠️ <b>User par reply karein:</b> <code>.unmute @username</code></blockquote>", parse_mode=ParseMode.HTML)
-
-    try:
-        chat = await client.get_chat(message.chat.id)
-        default_perms = chat.permissions or ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_other_messages=True, can_add_web_page_previews=True)
-        await client.restrict_chat_member(chat_id=message.chat.id, user_id=target.id, permissions=default_perms)
-        mention = get_user_mention(target)
-        await message.reply_text(f"<blockquote>🔊 <b>Unmuted!</b>\n👤 <b>User:</b> {mention}\n💬 <b>Status:</b> Restrictions hata di gayi hain!</blockquote>", parse_mode=ParseMode.HTML)
-    except Exception as e:
-        await message.reply_text(f"<blockquote>⚠️ <b>Failed to unmute:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
-
-@Client.on_message(filters.command(["kick"], prefixes=[".", "/"]) & filters.group)
-async def kick_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    target = await extract_target_user(client, message)
-    if not target:
-        return await message.reply_text("<blockquote>⚠️ <b>User par reply karein:</b> <code>.kick @username</code></blockquote>", parse_mode=ParseMode.HTML)
-
-    bot = await client.get_me()
-    if target.id == bot.id:
-        return await message.reply_text("<blockquote>🥺 Main khud ko kick nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
-
-    target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
-    if target_is_adm:
-        return await message.reply_text("<blockquote>❌ <b>Admin ko kick nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    try:
-        await client.ban_chat_member(message.chat.id, target.id)
-        await client.unban_chat_member(message.chat.id, target.id)
-        mention = get_user_mention(target)
-        await message.reply_text(f"<blockquote>👢 <b>Kicked!</b>\n👤 <b>User:</b> {mention}\n💨 <b>Status:</b> Group se nikal diya gaya hai.</blockquote>", parse_mode=ParseMode.HTML)
-    except Exception as e:
-        await message.reply_text(f"<blockquote>⚠️ <b>Failed to kick:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
-
-@Client.on_message(filters.command(["warn"], prefixes=[".", "/"]) & filters.group)
-async def warn_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b>\nAapke paas warn karne ka right nahi hai.</blockquote>", parse_mode=ParseMode.HTML)
-
-    target = await extract_target_user(client, message)
-    if not target:
-        return await message.reply_text("<blockquote>⚠️ <b>User par reply karke warn dein:</b> <code>.warn &lt;reason&gt;</code></blockquote>", parse_mode=ParseMode.HTML)
-
-    bot = await client.get_me()
-    if target.id == bot.id:
-        return await message.reply_text("<blockquote>🥺 Main khud ko warn nahi de sakti!</blockquote>", parse_mode=ParseMode.HTML)
-
-    target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
-    if target_is_adm:
-        return await message.reply_text("<blockquote>❌ <b>Admin ko warn nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
+        return await message.reply_text("<blockquote>🥺 Main pehle se bot admin hoon!</blockquote>", parse_mode=ParseMode.HTML)
 
     parts = message.text.split(maxsplit=2)
-    reason = "Rules violation"
-    if message.reply_to_message and len(parts) > 1:
-        reason = message.text.split(maxsplit=1)[1]
-    elif len(parts) > 2:
-        reason = parts[2]
+    custom_title = "Admin"
+    if message.reply_to_message:
+        if len(parts) > 1:
+            custom_title = message.text.split(maxsplit=1)[1]
+    else:
+        if len(parts) > 2:
+            custom_title = parts[2]
 
-    chat_id = message.chat.id
-    if chat_id not in warn_data:
-        warn_data[chat_id] = {}
-
-    current_warns = warn_data[chat_id].get(target.id, 0) + 1
-    warn_data[chat_id][target.id] = current_warns
-    mention = get_user_mention(target)
-
-    if current_warns >= 3:
-        warn_data[chat_id][target.id] = 0
+    try:
+        p_rights = ChatPrivileges(
+            can_manage_chat=True,
+            can_delete_messages=True,
+            can_manage_video_chats=True,
+            can_restrict_members=True,
+            can_promote_members=False,
+            can_change_info=True,
+            can_invite_users=True,
+            can_pin_messages=True,
+        )
+        await client.promote_chat_member(message.chat.id, target.id, p_rights)
         try:
-            await client.ban_chat_member(chat_id, target.id)
-            btn = InlineKeyboardMarkup([[InlineKeyboardButton("✨ Unban Member", callback_data=f"adm_unban_{target.id}")]])
-            return await message.reply_text(f"<blockquote>🚫 <b>3/3 Warnings Reached!</b>\n👤 <b>User:</b> {mention}\n📝 <b>Reason:</b> <i>{html.escape(reason)}</i>\n⚡ <b>Action:</b> User has been banned!</blockquote>", reply_markup=btn, parse_mode=ParseMode.HTML)
-        except Exception as e:
-            return await message.reply_text(f"<blockquote>⚠️ Ban failed: <code>{e}</code></blockquote>")
+            await client.set_administrator_title(message.chat.id, target.id, custom_title[:16])
+        except Exception:
+            pass
 
-    btn = InlineKeyboardMarkup([[InlineKeyboardButton("🎀 Remove Warn (Admin Only)", callback_data=f"adm_rmwarn_{target.id}")]])
-    await message.reply_text(f"<blockquote>⚠️ <b>Warning Issued!</b>\n✦ ━━━━━━━━━━━━━━━━━━ ✦\n👤 <b>User:</b> {mention}\n📊 <b>Warnings:</b> <code>{current_warns}/3</code>; be careful!\n📝 <b>Reason:</b> <i>{html.escape(reason)}</i></blockquote>", reply_markup=btn, parse_mode=ParseMode.HTML)
+        mention = get_user_mention(target)
+        btn = InlineKeyboardMarkup([[InlineKeyboardButton("🔻 Demote Admin", callback_data=f"adm_demote_{target.id}")]])
 
-@Client.on_message(filters.command(["resetwarns", "rmwarn"], prefixes=[".", "/"]) & filters.group)
-async def reset_warn_cmd(client: Client, message: Message):
+        await message.reply_text(
+            f"<blockquote>🎖️ <b>Promoted!</b>\n"
+            f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"👤 <b>Admin:</b> {mention}\n"
+            f"🏷️ <b>Title:</b> <code>{html.escape(custom_title)}</code>\n"
+            f"✨ <i>Admin privileges successfully granted!</i></blockquote>",
+            reply_markup=btn,
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        await message.reply_text(
+            f"<blockquote>⚠️ <b>Failed to promote:</b> <code>{html.escape(str(e))}</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+
+# ==================== DEMOTE (COMMAND) ====================
+@Client.on_message(filters.command(["demote"], prefixes=[".", "/"]) & filters.group)
+async def demote_command(client: Client, message: Message):
     if not message.from_user:
         return
+
     is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
     if not is_adm:
         return
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b></blockquote>", parse_mode=ParseMode.HTML)
+
+    # Check Add Admins Permission
+    if privs != "owner" and not (privs and privs.can_promote_members):
+        return await message.reply_text(
+            "<blockquote>❌ <b>Permission Denied!</b>\n"
+            "Aapke paas admins demote karne ka right (Add New Admins) nahi hai!</blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
 
     target = await extract_target_user(client, message)
     if not target:
-        return await message.reply_text("<blockquote>⚠️ User par reply karein: <code>.resetwarns</code></blockquote>", parse_mode=ParseMode.HTML)
+        return await message.reply_text(
+            "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b> <code>.demote @username</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
 
-    chat_id = message.chat.id
-    if chat_id in warn_data and target.id in warn_data[chat_id]:
-        warn_data[chat_id][target.id] = 0
+    bot = await client.get_me()
+    if target.id == bot.id:
+        return await message.reply_text("<blockquote>🥺 Main khud ko demote nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
 
-    mention = get_user_mention(target)
-    await message.reply_text(f"<blockquote>✨ <b>Warnings reset for {mention}!</b> (0/3)</blockquote>", parse_mode=ParseMode.HTML)
+    try:
+        no_rights = ChatPrivileges(
+            can_manage_chat=False,
+            can_delete_messages=False,
+            can_manage_video_chats=False,
+            can_restrict_members=False,
+            can_promote_members=False,
+            can_change_info=False,
+            can_invite_users=False,
+            can_pin_messages=False,
+        )
+        await client.promote_chat_member(message.chat.id, target.id, no_rights)
+        mention = get_user_mention(target)
+        await message.reply_text(
+            f"<blockquote>🔻 <b>Demoted!</b>\n"
+            f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"👤 <b>User:</b> {mention}\n"
+            f"✨ <i>Admin rights revoked successfully!</i></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        await message.reply_text(
+            f"<blockquote>⚠️ <b>Failed to demote:</b> <code>{html.escape(str(e))}</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
 
-@Client.on_callback_query(filters.regex(r"^adm_(unban|unmute|rmwarn)_(\d+)$"))
-async def admin_buttons_callback(client: Client, query: CallbackQuery):
-    action = query.data.split("_")[1]
-    user_id = int(query.data.split("_")[2])
+# ==================== DEMOTE (BUTTON CALLBACK) ====================
+@Client.on_callback_query(filters.regex(r"^adm_demote_(\d+)$"))
+async def demote_button_callback(client: Client, query: CallbackQuery):
+    target_id = int(query.data.split("_")[2])
     chat_id = query.message.chat.id
 
     is_adm, privs = await get_admin_privileges(client, query.from_user.id, chat_id)
     if not is_adm:
         return await query.answer("❌ Sirf Admins hi yeh button use kar sakte hain!", show_alert=True)
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await query.answer("❌ Aapke paas members ko restrict/unrestrict karne ka right nahi hai!", show_alert=True)
+
+    # Check Add Admins Permission on Button Click
+    if privs != "owner" and not (privs and privs.can_promote_members):
+        return await query.answer("❌ Aapke paas admins demote karne ka right (Add New Admins) nahi hai!", show_alert=True)
 
     try:
-        if action == "unban":
-            await client.unban_chat_member(chat_id, user_id)
-            await query.answer("✅ User unbanned!")
-            await query.message.edit_text(f"<blockquote>✨ <b>User unbanned by <a href='tg://user?id={query.from_user.id}'>{html.escape(query.from_user.first_name)}</a>!</b></blockquote>", parse_mode=ParseMode.HTML)
-        elif action == "unmute":
-            chat = await client.get_chat(chat_id)
-            default_perms = chat.permissions or ChatPermissions(can_send_messages=True, can_send_media_messages=True)
-            await client.restrict_chat_member(chat_id, user_id, default_perms)
-            await query.answer("🔊 User unmuted!")
-            await query.message.edit_text(f"<blockquote>🔊 <b>User unmuted by <a href='tg://user?id={query.from_user.id}'>{html.escape(query.from_user.first_name)}</a>!</b></blockquote>", parse_mode=ParseMode.HTML)
-        elif action == "rmwarn":
-            if chat_id in warn_data and user_id in warn_data[chat_id]:
-                warn_data[chat_id][user_id] = max(0, warn_data[chat_id][user_id] - 1)
-                rem = warn_data[chat_id][user_id]
-                await query.answer(f"Warn removed! Ab {rem}/3 bache hain.")
-                await query.message.edit_text(f"<blockquote>🎀 <b>Warn removed by <a href='tg://user?id={query.from_user.id}'>{html.escape(query.from_user.first_name)}</a>!</b>\nCurrent status: <code>{rem}/3</code></blockquote>", parse_mode=ParseMode.HTML)
-            else:
-                await query.answer("Is user ke paas koi active warn nahi hai.")
+        no_rights = ChatPrivileges(
+            can_manage_chat=False,
+            can_delete_messages=False,
+            can_manage_video_chats=False,
+            can_restrict_members=False,
+            can_promote_members=False,
+            can_change_info=False,
+            can_invite_users=False,
+            can_pin_messages=False,
+        )
+        await client.promote_chat_member(chat_id, target_id, no_rights)
+        await query.answer("✅ Admin successfully demoted!")
+
+        admin_name = html.escape(query.from_user.first_name)
+        await query.message.edit_text(
+            f"<blockquote>🔻 <b>Demoted!</b>\n"
+            f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"✨ <i>Admin rights removed by <a href='tg://user?id={query.from_user.id}'>{admin_name}</a>!</i></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
     except Exception as e:
         await query.answer(f"Error: {e}", show_alert=True)
-
-@Client.on_message(filters.command(["pin"], prefixes=[".", "/"]) & filters.group)
-async def pin_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-    if privs != "owner" and not (privs and privs.can_pin_messages):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b>\nAapke paas messages pin karne ka right nahi hai.</blockquote>", parse_mode=ParseMode.HTML)
-
-    if not message.reply_to_message:
-        return await message.reply_text("<blockquote>⚠️ <b>Message par reply karke <code>.pin</code> karein.</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    is_loud = "loud" in message.text.lower()
-    try:
-        await client.pin_chat_message(chat_id=message.chat.id, message_id=message.reply_to_message.id, disable_notification=not is_loud)
-        await message.reply_text(f"<blockquote>📌 <b>Pinned!</b>\nNotify: <code>{'ON 🔔' if is_loud else 'OFF 🔕'}</code></blockquote>", parse_mode=ParseMode.HTML)
-    except Exception as e:
-        await message.reply_text(f"<blockquote>⚠️ <b>Pin failed:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
-
-@Client.on_message(filters.command(["unpin"], prefixes=[".", "/"]) & filters.group)
-async def unpin_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-    if privs != "owner" and not (privs and privs.can_pin_messages):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    target_id = message.reply_to_message.id if message.reply_to_message else None
-    try:
-        await client.unpin_chat_message(chat_id=message.chat.id, message_id=target_id)
-        await message.reply_text("<blockquote>📌 <b>Message Unpinned!</b></blockquote>", parse_mode=ParseMode.HTML)
-    except Exception as e:
-        await message.reply_text(f"<blockquote>⚠️ <b>Unpin failed:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
-
-@Client.on_message(filters.command(["unpinall"], prefixes=[".", "/"]) & filters.group)
-async def unpinall_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-    if privs != "owner" and not (privs and privs.can_pin_messages):
-        return await message.reply_text("<blockquote>❌ <b>Permission Denied!</b></blockquote>", parse_mode=ParseMode.HTML)
-
-    try:
-        await client.unpin_all_chat_messages(chat_id=message.chat.id)
-        await message.reply_text("<blockquote>🧹 <b>All pinned messages unpinned!</b></blockquote>", parse_mode=ParseMode.HTML)
-    except Exception as e:
-        await message.reply_text(f"<blockquote>⚠️ <b>Unpinall failed:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
         
