@@ -1,8 +1,9 @@
-import io
+import os
 import aiohttp
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 QUOTLY_API = "https://quote.yuri.ly/generate"
 
 @Client.on_message(filters.command(["q", "quote"], prefixes=[".", "/"]) & filters.group)
@@ -11,15 +12,9 @@ async def quotly_maker(client: Client, message: Message):
     if not reply:
         return await message.reply_text("<blockquote>⚠️ <b>Kisi ke message par reply karke <code>.q</code> likhein.</b></blockquote>")
 
-    # Safely text extract karein (string guarantee ke sath)
-    msg_text = ""
-    if reply.text:
-        msg_text = str(reply.text)
-    elif reply.caption:
-        msg_text = str(reply.caption)
-
-    if not msg_text.strip():
-        return await message.reply_text("<blockquote>⚠️ <b>Sirf text message ka quote sticker banaya ja sakta hai.</b></blockquote>")
+    msg_text = str(reply.text or reply.caption or "").strip()
+    if not msg_text:
+        return await message.reply_text("<blockquote>⚠️ <b>Sirf text message ka quote sticker ban sakta hai.</b></blockquote>")
 
     user = reply.from_user
     if user:
@@ -62,20 +57,28 @@ async def quotly_maker(client: Client, message: Message):
 
     try:
         async with aiohttp.ClientSession() as session:
+            # 1. Quotly API se sticker download karein
             async with session.post(QUOTLY_API, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                 if resp.status != 200:
-                    return await message.reply_text("<blockquote>❌ <b>Sticker banne me dikkat aayi. Baad me prayas karein.</b></blockquote>")
+                    return await message.reply_text("<blockquote>❌ <b>Quotly server busy hai, thodi der baad try karein.</b></blockquote>")
                 sticker_bytes = await resp.read()
 
-        sticker_file = io.BytesIO(sticker_bytes)
-        sticker_file.name = "sticker.webp"
+            # 2. Telegram Bot API sendSticker method ko directly raw multipart me send karein
+            telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendSticker"
+            form = aiohttp.FormData()
+            form.add_field("chat_id", str(message.chat.id))
+            form.add_field("reply_to_message_id", str(reply.id))
+            form.add_field(
+                "sticker",
+                sticker_bytes,
+                filename="sticker.webp",
+                content_type="image/webp"
+            )
 
-        # Reply to original quoted message directly
-        await client.send_sticker(
-            chat_id=message.chat.id,
-            sticker=sticker_file,
-            reply_to_message_id=reply.id
-        )
+            async with session.post(telegram_url, data=form) as tg_resp:
+                if tg_resp.status != 200:
+                    err_json = await tg_resp.json()
+                    await message.reply_text(f"<blockquote>❌ <b>Telegram Error:</b> <code>{err_json}</code></blockquote>")
 
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Error:</b> <code>{e}</code></blockquote>")
