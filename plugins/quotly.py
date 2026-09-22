@@ -1,4 +1,4 @@
-import os
+import io
 import aiohttp
 from pyrogram import Client, filters
 from pyrogram.types import Message
@@ -11,20 +11,31 @@ async def quotly_maker(client: Client, message: Message):
     if not reply:
         return await message.reply_text("<blockquote>⚠️ <b>Kisi ke message par reply karke <code>.q</code> likhein.</b></blockquote>")
 
-    text = reply.text or reply.caption
-    if not text:
-        return await message.reply_text("<blockquote>⚠️ <b>Sirf text message ka quote sticker ban sakta hai.</b></blockquote>")
+    # Safely text extract karein (string guarantee ke sath)
+    msg_text = ""
+    if reply.text:
+        msg_text = str(reply.text)
+    elif reply.caption:
+        msg_text = str(reply.caption)
+
+    if not msg_text.strip():
+        return await message.reply_text("<blockquote>⚠️ <b>Sirf text message ka quote sticker banaya ja sakta hai.</b></blockquote>")
 
     user = reply.from_user
     if user:
-        first_name = user.first_name or "User"
-        last_name = user.last_name or ""
-        user_id = user.id
-        username = user.username or ""
-    else:
-        first_name = reply.sender_chat.title if reply.sender_chat else "Anonymous"
+        first_name = str(user.first_name) if user.first_name else "User"
+        last_name = str(user.last_name) if user.last_name else ""
+        user_id = int(user.id)
+        username = str(user.username) if user.username else ""
+    elif reply.sender_chat:
+        first_name = str(reply.sender_chat.title) if reply.sender_chat.title else "Anonymous"
         last_name = ""
-        user_id = reply.sender_chat.id if reply.sender_chat else 1000
+        user_id = int(reply.sender_chat.id)
+        username = str(reply.sender_chat.username) if reply.sender_chat.username else ""
+    else:
+        first_name = "User"
+        last_name = ""
+        user_id = 1000
         username = ""
 
     payload = {
@@ -44,35 +55,28 @@ async def quotly_maker(client: Client, message: Message):
                     "last_name": last_name,
                     "username": username
                 },
-                "text": text
+                "text": msg_text
             }
         ]
     }
-
-    temp_sticker_path = f"sticker_{message.id}.webp"
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(QUOTLY_API, json=payload, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                 if resp.status != 200:
-                    return await message.reply_text("<blockquote>❌ <b>Quotly server se sticker generate nahi ho paya.</b></blockquote>")
-                sticker_data = await resp.read()
+                    return await message.reply_text("<blockquote>❌ <b>Sticker banne me dikkat aayi. Baad me prayas karein.</b></blockquote>")
+                sticker_bytes = await resp.read()
 
-        # Local storage me temporarily write karein
-        with open(temp_sticker_path, "wb") as f:
-            f.write(sticker_data)
+        sticker_file = io.BytesIO(sticker_bytes)
+        sticker_file.name = "sticker.webp"
 
-        # Local path se send karne par Telegram isko strictly "Sticker" hi render karega
+        # Reply to original quoted message directly
         await client.send_sticker(
             chat_id=message.chat.id,
-            sticker=temp_sticker_path,
+            sticker=sticker_file,
             reply_to_message_id=reply.id
         )
 
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Error:</b> <code>{e}</code></blockquote>")
-    finally:
-        # File delete karke space clean karein
-        if os.path.exists(temp_sticker_path):
-            os.remove(temp_sticker_path)
-            
+        
