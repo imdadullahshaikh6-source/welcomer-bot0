@@ -1,14 +1,10 @@
 import os
-import json
-import asyncio
-import urllib.request
 import re
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
-from pyrogram.types import Message, ChatMemberUpdated, CallbackQuery
+from pyrogram.types import Message, ChatMemberUpdated, InlineKeyboardMarkup, InlineKeyboardButton
 
 welcome_data = {}
-link_store = {}
 
 DEFAULT_WELCOME = (
     "<blockquote expandable>✨ <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙩𝙤 𝙩𝙝𝙚 𝙜𝙧𝙤𝙪𝙥</b> ✨\n"
@@ -18,32 +14,6 @@ DEFAULT_WELCOME = (
     "💬 Group rules follow karein aur chill karein!</blockquote>"
 )
 
-def get_token():
-    return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
-
-async def call_tg_bot_api(endpoint: str, payload: dict):
-    token = get_token()
-    if not token:
-        return None
-
-    url = f"https://api.telegram.org/bot{token}/{endpoint}"
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-
-    def _sync():
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as he:
-            err = he.read().decode("utf-8", errors="ignore")
-            print(f"[BotAPI HTTP {he.code}] {err}")
-            return None
-        except Exception as e:
-            print(f"[BotAPI Conn Error] {e}")
-            return None
-
-    return await asyncio.to_thread(_sync)
-
 async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
     try:
         member = await client.get_chat_member(chat_id, user_id)
@@ -51,49 +21,48 @@ async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
     except Exception:
         return False
 
-# 1st button: Primary (Blue), 2nd button: Danger (Red), 3rd button: Success (Green)
-PALETTE = ["primary", "danger", "success"]
+# Visual Color Indicators: 1st Blue, 2nd Red, 3rd Green
+ICONS = ["🔵", "🔴", "🟢"]
 
-def parse_buttons(raw_text: str, chat_id: int):
+def parse_buttons(raw_text: str):
     if not raw_text:
         return "", None
 
-    btn_pattern = re.compile(
-        r"\[([^\[\]]+?)\](?:\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\|\s*(https?://[^\s\]]+)\])"
+    # Supports:
+    # 1. [Title](buttonurl:https://...)
+    # 2. [Title](https://...)
+    # 3. [Title | https://...]
+    btn_regex = re.compile(
+        r"\[([^\[\]\(\)\|]+)\](?:\((?:buttonurl:)?\s*(https?://[^\s\)]+)\)|\|\s*(https?://[^\[\]\|\s]+))"
     )
 
     buttons = []
     lines = raw_text.split("\n")
     cleaned_lines = []
-    btn_count = 0
+    btn_idx = 0
 
     for line in lines:
-        matches = btn_pattern.findall(line)
+        matches = btn_regex.findall(line)
         if matches:
             row = []
             for m in matches:
                 title = m[0].strip()
                 url = m[1].strip() if m[1] else m[2].strip()
 
-                assigned_style = PALETTE[btn_count % len(PALETTE)]
-                btn_count += 1
+                # Add aesthetic badge if not already present
+                badge = ICONS[btn_idx % len(ICONS)]
+                btn_idx += 1
 
-                # Save link to trigger via callback (which allows true color rendering!)
-                cb_data = f"lnk_{abs(chat_id)}_{btn_count}"
-                link_store[cb_data] = {"title": title, "url": url}
+                display_title = f"{badge} {title}" if not any(c in title for c in ["🔵", "🔴", "🟢"]) else title
+                row.append(InlineKeyboardButton(text=display_title, url=url))
 
-                row.append({
-                    "text": title,
-                    "callback_data": cb_data,
-                    "style": assigned_style
-                })
             if row:
                 buttons.append(row)
         else:
             cleaned_lines.append(line)
 
     cleaned_text = "\n".join(cleaned_lines).rstrip()
-    markup = {"inline_keyboard": buttons} if buttons else None
+    markup = InlineKeyboardMarkup(buttons) if buttons else None
     return cleaned_text, markup
 
 def format_exact_quotes(html_text: str) -> str:
@@ -140,53 +109,47 @@ async def send_welcome_payload(client: Client, chat_id: int, user, chat_title: s
         return
 
     raw_template = settings.get("text") or DEFAULT_WELCOME
-    keyboard = settings.get("keyboard")
+    markup = settings.get("keyboard")
     m_type = settings.get("type", "text")
     f_id = settings.get("file_id")
 
     caption = apply_template_tags(raw_template, user, chat_title)
 
-    payload = {
-        "chat_id": chat_id,
-        "parse_mode": "HTML"
-    }
-    if keyboard:
-        payload["reply_markup"] = keyboard
-
-    if m_type == "photo" and f_id:
-        payload["photo"] = f_id
-        payload["caption"] = caption
-        res = await call_tg_bot_api("sendPhoto", payload)
-    elif m_type in ["video", "animation"] and f_id:
-        payload["video"] = f_id
-        payload["caption"] = caption
-        res = await call_tg_bot_api("sendVideo", payload)
-        if not (res and res.get("ok")):
-            payload.pop("video", None)
-            payload["animation"] = f_id
-            res = await call_tg_bot_api("sendAnimation", payload)
-    else:
-        payload["text"] = caption
-        payload["disable_web_page_preview"] = True
-        res = await call_tg_bot_api("sendMessage", payload)
-
-    # Pyrogram fallback
-    if not (res and res.get("ok")):
-        if m_type == "photo" and f_id:
-            await client.send_photo(chat_id=chat_id, photo=f_id, caption=caption, parse_mode=ParseMode.HTML)
-        elif m_type in ["video", "animation"] and f_id:
-            await client.send_video(chat_id=chat_id, video=f_id, caption=caption, parse_mode=ParseMode.HTML)
+    try:
+        if m_type == "video" and f_id:
+            await client.send_video(
+                chat_id=chat_id,
+                video=f_id,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+                reply_markup=markup
+            )
+        elif m_type == "photo" and f_id:
+            await client.send_photo(
+                chat_id=chat_id,
+                photo=f_id,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+                reply_markup=markup
+            )
+        elif m_type == "animation" and f_id:
+            await client.send_animation(
+                chat_id=chat_id,
+                animation=f_id,
+                caption=caption,
+                parse_mode=ParseMode.HTML,
+                reply_markup=markup
+            )
         else:
-            await client.send_message(chat_id=chat_id, text=caption, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-
-# ==================== Callback Link Opener ====================
-@Client.on_callback_query(filters.regex(r"^lnk_"))
-async def open_linked_button(client: Client, query: CallbackQuery):
-    data = link_store.get(query.data)
-    if not data:
-        return await query.answer("🔗 Link expired! Please re-send .setwelcome.", show_alert=True)
-    # Opens link directly on user device with confirmation
-    await query.answer(url=data["url"])
+            await client.send_message(
+                chat_id=chat_id,
+                text=caption,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+                reply_markup=markup
+            )
+    except Exception as e:
+        print(f"[Send Welcome Error] {e}")
 
 # ==================== .setwelcome ====================
 @Client.on_message(filters.command(["setwelcome"], prefixes=[".", "/"]) & filters.group)
@@ -202,17 +165,17 @@ async def set_welcome_msg(client: Client, message: Message):
     target_text = ""
 
     if reply:
-        if reply.photo:
-            media_type = "photo"
-            file_id = reply.photo.file_id
-            target_text = reply.caption.html if reply.caption else ""
-        elif reply.video:
+        if reply.video:
             media_type = "video"
             file_id = reply.video.file_id
             target_text = reply.caption.html if reply.caption else ""
         elif reply.animation:
             media_type = "animation"
             file_id = reply.animation.file_id
+            target_text = reply.caption.html if reply.caption else ""
+        elif reply.photo:
+            media_type = "photo"
+            file_id = reply.photo.file_id
             target_text = reply.caption.html if reply.caption else ""
         else:
             media_type = "text"
@@ -224,11 +187,11 @@ async def set_welcome_msg(client: Client, message: Message):
 
     if not target_text and not file_id:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>Kisi video/photo par reply karke <code>.setwelcome</code> likhein.</b></blockquote>",
+            "<blockquote>⚠️ <b>Kisi video ya message par reply karke <code>.setwelcome</code> karein!</b></blockquote>",
             parse_mode=ParseMode.HTML
         )
 
-    cleaned_text, parsed_keyboard = parse_buttons(target_text, chat_id)
+    cleaned_text, parsed_markup = parse_buttons(target_text)
     final_text = format_exact_quotes(cleaned_text)
 
     welcome_data[chat_id] = {
@@ -236,19 +199,19 @@ async def set_welcome_msg(client: Client, message: Message):
         "type": media_type,
         "file_id": file_id,
         "text": final_text,
-        "keyboard": parsed_keyboard
+        "keyboard": parsed_markup
     }
 
     admin_name = message.from_user.first_name or "Admin"
-    btn_count = sum(len(r) for r in parsed_keyboard["inline_keyboard"]) if parsed_keyboard else 0
+    btn_count = sum(len(r) for r in parsed_markup.inline_keyboard) if parsed_markup else 0
 
     preview = (
         "<blockquote>🎉 <b>𝙬𝙚𝙡𝙘𝙤𝙢𝙚 𝙢𝙚𝙨𝙨𝙖𝙜𝙚 𝙨𝙚𝙩</b> 🎉\n"
         "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👮 <b>Set By:</b> <a href='tg://user?id={message.from_user.id}'>{admin_name}</a>\n"
         f"🎬 <b>Media:</b> <code>{media_type.upper()}</code>\n"
-        f"🎨 <b>Colored Buttons:</b> <code>{btn_count} Buttons (Blue &amp; Red)</code>\n"
-        "⚡ <b>Status:</b> Saved Successfully!</blockquote>"
+        f"🔘 <b>Buttons Saved:</b> <code>{btn_count} Buttons (Blue 🔵 &amp; Red 🔴)</code>\n"
+        "⚡ <b>Status:</b> Ready &amp; Verified!</blockquote>"
     )
     await message.reply_text(preview, parse_mode=ParseMode.HTML)
 
