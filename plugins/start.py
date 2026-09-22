@@ -11,7 +11,7 @@ SUPPORT_GROUP_URL = "https://t.me/+UCmLt1cgPhI1MjFl"
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Bot API HTTP Caller for styles and reaction handling
+# Bot API HTTP Caller for styles and reactions
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -47,13 +47,40 @@ GROUP_START_TEXT = (
     "<blockquote>✨ <b>Zoya is active here!</b> 🎀\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
     "Hey {mention}! Main is group ko safe aur clean rakhne ke liye tayar hoon.\n\n"
-    "⚙️ Commands aur settings ke liye mere <b>PM (DM)</b> mein check karein!</blockquote>"
+    "⚙️ Commands aur formatting guide ke liye mere <b>PM (DM)</b> mein check karein!</blockquote>"
 )
 
 HELP_TEXT = (
     "<blockquote>⚡ <b>All Features & Modules:</b>\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
     "Niche diye gaye modules par tap karke controls dekhein:</blockquote>"
+)
+
+# Complete Formatted Guide for Welcome, Buttons, Tags and Quotes
+FORMATTING_GUIDE_TEXT = (
+    "<blockquote>📖 <b>𝙁𝙤𝙧𝙢𝙖𝙩𝙩𝙞𝙣𝙜 & 𝙎𝙮𝙣𝙩𝙖𝙭 𝙂𝙪𝙞𝙙𝙚</b> ✨\n"
+    "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n"
+    "🎀 <b>1. Welcome Message Set Karna:</b>\n"
+    "Kisi bhi Video/Photo ke caption mein apna text likhein aur us par reply karke <code>.setwelcome</code> likhein.\n\n"
+    "🏷️ <b>2. Auto Tags (Dynamic Placeholders):</b>\n"
+    "• <code>{mention}</code> - User ka clickable name\n"
+    "• <code>{id}</code> - User ki numeric Telegram ID\n"
+    "• <code>{username}</code> - User ka @username\n"
+    "• <code>{chat}</code> - Group ka title/naam\n\n"
+    "🔘 <b>3. Buttons Lagane Ka Tarika:</b>\n"
+    "Message caption ke aakhri lines mein is tarah likhein:\n"
+    "• <i>Single Button:</i>\n"
+    "<code>[Button Title](https://t.me/link)</code>\n"
+    "• <i>Alag-Alag Rows (Line change karein):</i>\n"
+    "<code>[Music](https://t.me/link)</code>\n"
+    "<code>[Helpline](https://t.me/link)</code>\n"
+    "• <i>Ek Hi Line Mein Do Buttons:</i>\n"
+    "<code>[Channel](https://t.me/link) [Group](https://t.me/link)</code>\n\n"
+    "🎨 <b>4. Quotes Format (Expandable):</b>\n"
+    "• Bot automatically aapke captions ko stylish <code>&lt;blockquote expandable&gt;</code> mein wrap kar deta hai jisse message clean aur collapseable dikhta hai.\n\n"
+    "🛡️ <b>5. Moderation Format:</b>\n"
+    "• Reply karke: <code>.ban</code> | <code>.unban</code> | <code>.mute</code>\n"
+    "• Direct Tag karke: <code>.ban @username</code> ya <code>.ban Noor</code></blockquote>"
 )
 
 def get_start_markup(bot_username: str):
@@ -63,7 +90,8 @@ def get_start_markup(bot_username: str):
     return {
         "inline_keyboard": [
             [
-                {"text": "⚡ COMMANDS", "callback_data": "open_commands", "style": "success"}
+                {"text": "⚡ COMMANDS", "callback_data": "open_commands", "style": "success"},
+                {"text": "🎨 FORMATTING", "callback_data": "open_formatting", "style": "success"}
             ],
             [
                 {"text": "👑 OWNER", "url": owner_url, "style": "success"},
@@ -111,7 +139,7 @@ def get_commands_menu():
 # Handles /start in BOTH Private and Groups
 @Client.on_message(filters.command("start", prefixes=["/", "."]))
 async def start_handler(client: Client, message: Message):
-    # 1. Drop reaction on user message (Group & DM)
+    # Reaction handling
     try:
         reaction_payload = {
             "chat_id": message.chat.id,
@@ -163,6 +191,24 @@ async def commands_callback(client: Client, query: CallbackQuery):
         "text": HELP_TEXT,
         "parse_mode": "HTML",
         "reply_markup": get_commands_menu()
+    }
+    await call_tg_bot_api("editMessageText", payload)
+    await query.answer()
+
+@Client.on_callback_query(filters.regex("^open_formatting$"))
+async def formatting_callback(client: Client, query: CallbackQuery):
+    back_btn = {
+        "inline_keyboard": [
+            [{"text": "« Back To Home", "callback_data": "back_to_start", "style": "success"}]
+        ]
+    }
+    payload = {
+        "chat_id": query.message.chat.id,
+        "message_id": query.message.id,
+        "text": FORMATTING_GUIDE_TEXT,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+        "reply_markup": back_btn
     }
     await call_tg_bot_api("editMessageText", payload)
     await query.answer()
