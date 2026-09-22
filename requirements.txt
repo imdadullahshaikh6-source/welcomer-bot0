@@ -1,4 +1,4 @@
 pyrofork
 tgcrypto
-aiohttp
+pillow
 
