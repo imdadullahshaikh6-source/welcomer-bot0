@@ -1,9 +1,7 @@
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import ChatJoinRequest, Message
-
-# Active groups set for auto-accepting requests
-active_request_chats = set()
+from database import is_request_accept_on, set_request_accept
 
 async def is_admin(client: Client, user_id: int, chat_id: int) -> bool:
     try:
@@ -21,11 +19,12 @@ async def request_accept_toggle(client: Client, message: Message):
     chat_id = message.chat.id
     admin_name = message.from_user.first_name or "Admin"
     args = message.text.split()
+    current_status_db = await is_request_accept_on(chat_id)
 
     if len(args) < 2:
-        current_status = "ON 🟢" if chat_id in active_request_chats else "OFF 🔴"
+        status_text = "ON 🟢" if current_status_db else "OFF 🔴"
         return await message.reply_text(
-            f"<blockquote>ℹ️ <b>Current Status:</b> <code>{current_status}</code>\n\n"
+            f"<blockquote>ℹ️ <b>Current Status:</b> <code>{status_text}</code>\n\n"
             "Use: <code>.requestaccept on</code> ya <code>.requestaccept off</code></blockquote>",
             parse_mode=ParseMode.HTML
         )
@@ -33,12 +32,12 @@ async def request_accept_toggle(client: Client, message: Message):
     mode = args[1].lower()
 
     if mode in ["on", "enable", "chalu"]:
-        if chat_id in active_request_chats:
+        if current_status_db:
             return await message.reply_text(
                 "<blockquote>⚠️ <b>Auto Request Accept pehle se hi ON hai!</b></blockquote>",
                 parse_mode=ParseMode.HTML
             )
-        active_request_chats.add(chat_id)
+        await set_request_accept(chat_id, True)
         text = (
             "<blockquote>⚡ <b>𝙧𝙚𝙦𝙪𝙚𝙨𝙩 𝙖𝙘𝙘𝙚𝙥𝙩 : 𝙤𝙣</b> ⚡\n"
             "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
@@ -49,12 +48,12 @@ async def request_accept_toggle(client: Client, message: Message):
         await message.reply_text(text=text, parse_mode=ParseMode.HTML)
 
     elif mode in ["off", "disable", "band"]:
-        if chat_id not in active_request_chats:
+        if not current_status_db:
             return await message.reply_text(
                 "<blockquote>⚠️ <b>Auto Request Accept pehle se hi OFF hai!</b></blockquote>",
                 parse_mode=ParseMode.HTML
             )
-        active_request_chats.remove(chat_id)
+        await set_request_accept(chat_id, False)
         text = (
             "<blockquote>🛑 <b>𝙧𝙚𝙦𝙪𝙚𝙨𝙩 𝙖𝙘𝙘𝙚𝙥𝙩 : 𝙤𝙛𝙛</b> 🛑\n"
             "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
@@ -75,7 +74,7 @@ async def request_accept_toggle(client: Client, message: Message):
 async def auto_accept_listener(client: Client, request: ChatJoinRequest):
     chat_id = request.chat.id
 
-    if chat_id not in active_request_chats:
+    if not await is_request_accept_on(chat_id):
         return
 
     try:
