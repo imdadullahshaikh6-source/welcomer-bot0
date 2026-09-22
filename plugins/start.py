@@ -1,44 +1,37 @@
 from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
-START_TEXT = """
-> 👑 **Hello {mention}**
-> 
-> Main aapka **All-in-One Group Manager Bot** hoon. 
-> Groups ko manage karne, join requests auto-accept karne, 
-> aur pure chat environment ko maintain karne ke liye tayar hoon!
-> 
-> Niche diye gaye menu se mere features check karein:
-"""
+START_TEXT = """<blockquote>👑 <b>Hello {mention}</b>
 
-ADMIN_TEXT = """
-> 🛡️ **Admin Commands & Features:**
-> 
-> • `.promote <title>` - Admin banayein (Quick Demote Button ke sath)
-> • `.demote` - Admin rights revoke karein
-> • `.mute` - User ko mute karein (Quick Unmute Button ke sath)
-> • `.unmute` - User ko unmute karein
-> • `.ban` - Permanently ban karein
-> • `.kick` - Group se kick karein
-"""
+Main aapka <b>All-in-One Group Manager Bot</b> hoon.
+Groups ko manage karne, join requests auto-accept karne,
+aur pure chat environment ko maintain karne ke liye tayar hoon!
 
-AFK_TEXT = """
-> 💤 **AFK (Away From Keyboard) System:**
-> 
-> • `.afk <reason>` - AFK status set karein
-> • Group ke sabhi members ke liye fully functional
-> • Mention ya reply karne par bot instant notice dega
-> • Wapas aane par automatically disable ho jayega
-"""
+Niche diye gaye menu se mere features check karein:</blockquote>"""
 
-WELCOMER_TEXT = """
-> ✨ **Join Welcomer & Automation:**
-> 
-> • Pending join requests auto-approval system
-> • New users ke aane par custom quote welcome message
-> • `.start` - Welcomer automation on karein
-> • `.stop` - Welcomer automation pause karein
-"""
+ADMIN_TEXT = """<blockquote>🛡️ <b>Admin Commands & Features:</b>
+
+• <code>.promote &lt;title&gt;</code> - Admin banayein (Quick Demote Button)
+• <code>.demote</code> - Admin rights revoke karein
+• <code>.mute</code> - User ko mute karein (Quick Unmute Button)
+• <code>.unmute</code> - User ko unmute karein
+• <code>.ban</code> - Permanently ban karein
+• <code>.kick</code> - Group se kick karein</blockquote>"""
+
+AFK_TEXT = """<blockquote>💤 <b>AFK (Away From Keyboard) System:</b>
+
+• <code>.afk &lt;reason&gt;</code> - AFK status set karein
+• Group ke sabhi members ke liye fully functional
+• Mention ya reply karne par bot instant notice dega
+• Wapas aane par automatically disable ho jayega</blockquote>"""
+
+WELCOMER_TEXT = """<blockquote>✨ <b>Join Welcomer & Automation:</b>
+
+• Pending join requests auto-approval system
+• New users ke aane par custom quote welcome message
+• <code>.start</code> - Welcomer automation on karein
+• <code>.stop</code> - Welcomer automation pause karein</blockquote>"""
 
 def start_keyboard(bot_username: str):
     return InlineKeyboardMarkup([
@@ -61,28 +54,30 @@ BACK_KEYBOARD = InlineKeyboardMarkup([
 @Client.on_message(filters.command("start") & filters.private)
 async def private_start(client, message):
     bot = await client.get_me()
-    mention = f"[{message.from_user.first_name}](tg://user?id={message.from_user.id})"
+    mention = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.first_name}</a>"
     await message.reply_text(
         text=START_TEXT.format(mention=mention),
-        reply_markup=start_keyboard(bot.username)
+        reply_markup=start_keyboard(bot.username),
+        parse_mode=ParseMode.HTML
     )
 
 @Client.on_callback_query()
 async def callback_handler(client, query: CallbackQuery):
     data = query.data
     bot = await client.get_me()
-    mention = f"[{query.from_user.first_name}](tg://user?id={query.from_user.id})"
+    mention = f"<a href='tg://user?id={query.from_user.id}'>{query.from_user.first_name}</a>"
 
     if data == "help_admin":
-        await query.message.edit_text(text=ADMIN_TEXT, reply_markup=BACK_KEYBOARD)
+        await query.message.edit_text(text=ADMIN_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_afk":
-        await query.message.edit_text(text=AFK_TEXT, reply_markup=BACK_KEYBOARD)
+        await query.message.edit_text(text=AFK_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_welcomer":
-        await query.message.edit_text(text=WELCOMER_TEXT, reply_markup=BACK_KEYBOARD)
+        await query.message.edit_text(text=WELCOMER_TEXT, reply_markup=BACK_KEYBOARD, parse_mode=ParseMode.HTML)
     elif data == "help_back":
         await query.message.edit_text(
             text=START_TEXT.format(mention=mention),
-            reply_markup=start_keyboard(bot.username)
+            reply_markup=start_keyboard(bot.username),
+            parse_mode=ParseMode.HTML
         )
     await query.answer()
     
