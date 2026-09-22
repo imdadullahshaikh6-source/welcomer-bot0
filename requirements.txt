@@ -1,4 +1,7 @@
 pyrofork
 tgcrypto
 pillow
+motor
+pymongo
+
 
