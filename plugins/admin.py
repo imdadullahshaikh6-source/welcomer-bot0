@@ -32,8 +32,7 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
         try:
             with urllib.request.urlopen(req, timeout=10) as response:
                 return json.loads(response.read().decode("utf-8"))
-        except Exception as err:
-            print(f"[BotAPI Admin Error] {err}")
+        except Exception:
             return None
 
     return await asyncio.to_thread(_sync_post)
@@ -470,4 +469,5 @@ async def admin_buttons_callback(client: Client, query: CallbackQuery):
                     [{"text": "🟢 Unmute User", "callback_data": f"unmute_{target_id}", "style": "success"}]
                 ]
             }
-     
+            await call_tg_bot_api("editMessageText", {
+      
