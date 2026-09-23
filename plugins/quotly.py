@@ -1,5 +1,6 @@
 import io
 import html
+import base64
 import aiohttp
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
@@ -10,7 +11,7 @@ QUOTLY_API = "https://bot.lyo.su/quote/generate"
 async def quotly_command(client: Client, message):
     if not message.reply_to_message:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>Kisi user ke message par reply karke <code>.q</code> likhein!</b></blockquote>",
+            "<blockquote>⚠️ <b>Kisi message par reply karke <code>.q</code> likhein!</b></blockquote>",
             parse_mode=ParseMode.HTML
         )
 
@@ -23,15 +24,15 @@ async def quotly_command(client: Client, message):
             parse_mode=ParseMode.HTML
         )
 
-    status_msg = await message.reply_text("<blockquote>🎨 <i>Generating quote sticker...</i></blockquote>", parse_mode=ParseMode.HTML)
+    status_msg = await message.reply_text(
+        "<blockquote>🎨 <i>Generating quote sticker...</i></blockquote>",
+        parse_mode=ParseMode.HTML
+    )
 
-    # User profile photo fetch
-    avatar_url = None
     sender = reply_msg.from_user or reply_msg.sender_chat
     sender_id = sender.id if sender else 0
     sender_name = getattr(sender, "first_name", getattr(sender, "title", "User"))
 
-    # Payload setup for Quotly API
     payload = {
         "type": "quote",
         "format": "webp",
@@ -48,20 +49,20 @@ async def quotly_command(client: Client, message):
                     "name": sender_name,
                     "photo": {}
                 },
-                "text": text or "📷 [Photo / Media]",
+                "text": text or "📷 [Media]",
                 "replyMessage": {}
             }
         ]
     }
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(QUOTLY_API, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+        timeout = aiohttp.ClientTimeout(total=15)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(QUOTLY_API, json=payload) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     image_bytes = data.get("result", {}).get("image")
                     if image_bytes:
-                        import base64
                         raw_webp = base64.b64decode(image_bytes)
                         bio = io.BytesIO(raw_webp)
                         bio.name = "quote.webp"
@@ -73,7 +74,7 @@ async def quotly_command(client: Client, message):
                         return await status_msg.delete()
                 
                 await status_msg.edit_text(
-                    f"<blockquote>⚠️ <b>Quotly API Error:</b> Status code {resp.status}</blockquote>",
+                    f"<blockquote>⚠️ <b>Quotly Error:</b> Status {resp.status}</blockquote>",
                     parse_mode=ParseMode.HTML
                 )
     except Exception as e:
