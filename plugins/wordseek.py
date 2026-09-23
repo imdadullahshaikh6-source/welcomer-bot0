@@ -18,12 +18,24 @@ except ImportError:
 # Active games tracking per chat
 GAMES = {}
 
+# Special Bold Sans-Serif Font Converter (e.g., SPIN -> 𝗦𝗣𝗜𝗡)
+def to_bold_font(text: str) -> str:
+    bold_map = {
+        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚',
+        'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡',
+        'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨',
+        'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
+        '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲',
+        '7': '𝟳', '8': '𝟴', '9': '𝟵'
+    }
+    return "".join(bold_map.get(char, char) for char in text.upper())
+
 def check_guess_colors(guess: str, secret: str):
     """
     Green  = Correct letter & position
     Orange = Correct letter & wrong position
     Red    = Letter not present in word
-    Har color block ke beech clean space
+    Har block ke beech clean spacing
     """
     n = len(secret)
     result = ["🟥"] * n
@@ -48,10 +60,11 @@ def check_guess_colors(guess: str, secret: str):
 def format_board(game):
     lines = [
         "<blockquote><b>WordSeek</b>",
-        f"<b>{game['size']}-letter mode</b>  •  <b>{len(game['history'])}/30</b>\n"
+        f"<b>{game['size']}-letter mode · {len(game['history'])}/30</b>\n"
     ]
     for h in game["history"]:
-        lines.append(f"{h['colors']}   <b>{h['word']}</b>")
+        bold_word = to_bold_font(h['word'])
+        lines.append(f"{h['colors']}   {bold_word}")
     lines.append("</blockquote>")
     return "\n".join(lines)
 
@@ -111,7 +124,7 @@ async def start_wordseek(client: Client, message: Message):
     asyncio.create_task(auto_stop_timer(client, chat_id, duration_sec, secret))
     await message.reply(f"<blockquote>🎮 <b>Started new{size} wordseek!</b></blockquote>")
 
-# Game end command (.end / /end) - Secret word reveal nahi hoga
+# Game end command (.end / /end)
 @Client.on_message(filters.command(["end", "stopgame"], prefixes=["/", "."]))
 async def end_wordseek(client: Client, message: Message):
     chat_id = message.chat.id
@@ -175,10 +188,11 @@ async def wordseek_guess_checker(client: Client, message: Message):
     if guess == secret:
         GAMES.pop(chat_id)
         mention = message.from_user.mention if message.from_user else "Winner"
+        bold_secret = to_bold_font(secret)
         win_text = (
             f"{board_text}\n\n"
             f"<blockquote>🎉 <b>CONGRATULATIONS!</b>\n"
-            f"🏆 {mention} won! The word was <code>{secret}</code> 🥳</blockquote>"
+            f"🏆 {mention} won! The word was {bold_secret} 🥳</blockquote>"
         )
         await message.reply(win_text, quote=True)
         return
@@ -186,10 +200,11 @@ async def wordseek_guess_checker(client: Client, message: Message):
     # MAX GUESSES REACHED
     if len(game["history"]) >= game["max_guesses"]:
         GAMES.pop(chat_id)
+        bold_secret = to_bold_font(secret)
         lose_text = (
             f"{board_text}\n\n"
             f"<blockquote>⌛ <b>GAME OVER!</b> Max guesses reached.\n"
-            f"🎯 <b>Correct word was:</b> <code>{secret}</code></blockquote>"
+            f"🎯 <b>Correct word was:</b> {bold_secret}</blockquote>"
         )
         await message.reply(lose_text, quote=True)
         return
