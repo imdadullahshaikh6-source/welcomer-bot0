@@ -12,6 +12,7 @@ START_PHOTO_URL = "https://graph.org/file/d3a2c17942e606f4ec811-9c0373fa8bb10f44
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
+# Official Bot API Caller
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -30,18 +31,16 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
 
     return await asyncio.to_thread(_sync)
 
-# Complete & Clean DM Text (Welcome feature included, Owner text removed)
+# Exact Stylish Text
 DM_START_TEXT = (
-    "<blockquote>✨ <b>HEY BABY</b>\n"
-    "YOUR VIBES SEEM SO FINE TODAY  {mention} 🥀</blockquote>\n\n"
-    "<blockquote>🌸 <b>THIS IS ZOYA</b> 💖\n"
+    "<blockquote>🌸 <b>𝑯𝒆𝒚 {mention}!! 𝑰'𝒎 𝒁𝒐𝒚𝒂</b> 💖\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-    "Main aapke group ki <b>Smart & Aesthetic Manager</b> hoon!\n\n"
-    "✨ <i>Custom aesthetic welcomes</i>\n"
-    "🛡️ <i>Group protection & silent moderation</i>\n"
-    "🎮 <i>Mini games & Couple matcher</i>\n"
-    "💬 <i>AFK system & anti-spam vibes</i>\n\n"
-    "Niche diye buttons se explore karein:</blockquote>"
+    "<b>𝑴𝒂𝒊𝒏 𝒂𝒂𝒑𝒌𝒆 𝒈𝒓𝒐𝒖𝒑 𝒌𝒊 𝑺𝒎𝒂𝒓𝒕 & 𝑨𝒆𝒔𝒕𝒉𝒆𝒕𝒊𝒄 𝑴𝒂𝒏𝒂𝒈𝒆𝒓 𝒉𝒐𝒐𝒏!</b>\n\n"
+    "✨ <i>𝑪𝒖𝒔𝒕𝒐𝒎 𝒂𝒆𝒔𝒕𝒉𝒆𝒕𝒊𝒄 𝒘𝒆𝒍𝒄𝒐𝒎𝒆𝒔</i>\n"
+    "🛡️ <i>𝑮𝒓𝒐𝒖𝒑 𝒑𝒓𝒐𝒕𝒆𝒄𝒕𝒊𝒐𝒏 & 𝒔𝒊𝒍𝒆𝒏𝒕 𝒎𝒐𝒅𝒆𝒓𝒂𝒕𝒊𝒐𝒏</i>\n"
+    "🎮 <i>𝑴𝒊𝒏𝒊 𝒈𝒂𝒎𝒆𝒔 & 𝑪𝒐𝒖𝒑𝒍𝒆 𝒎𝒂𝒕𝒄𝒉𝒆𝒓</i>\n"
+    "💬 <i>𝑨𝑭𝑲 𝒔𝒚𝒔𝒕𝒆𝒎 & 𝒂𝒏𝒕𝒊-𝒔𝒑𝒂𝒎 𝒗𝒊𝒃𝒆𝒔</i>\n\n"
+    "<b>𝑵𝒊𝒄𝒉𝒆 𝒅𝒊𝒚𝒆 𝒃𝒖𝒕𝒕𝒐𝒏𝒔 𝒔𝒆 𝒆𝒙𝒑𝒍𝒐𝒓𝒆 𝒌𝒂𝒓𝒆𝒊𝒏:</b></blockquote>"
 )
 
 GROUP_START_TEXT = (
@@ -134,11 +133,12 @@ def get_commands_menu():
 
 @Client.on_message(filters.command("start", prefixes=["/", "."]))
 async def start_handler(client: Client, message: Message):
+    # User ke /start par Flame blast reaction
     asyncio.create_task(
         call_tg_bot_api("setMessageReaction", {
             "chat_id": message.chat.id,
             "message_id": message.id,
-            "reaction": [{"type": "emoji", "emoji": "❤️"}],
+            "reaction": [{"type": "emoji", "emoji": "🔥"}],
             "is_big": True
         })
     )
@@ -166,28 +166,26 @@ async def start_handler(client: Client, message: Message):
         return
 
     if message.chat.type.name == "PRIVATE":
+        # 1. Pehle banner photo bhejo (Aero style)
+        photo_resp = await call_tg_bot_api("sendPhoto", {
+            "chat_id": message.chat.id,
+            "photo": START_PHOTO_URL
+        })
+
+        # 2. Phir text message bhejo jiske upar reaction exact corner me aayega
         caption = DM_START_TEXT.format(mention=mention)
         markup = get_start_markup(bot.username)
         
-        payload = {
+        text_payload = {
             "chat_id": message.chat.id,
-            "photo": START_PHOTO_URL,
-            "caption": caption,
+            "text": caption,
             "parse_mode": "HTML",
+            "disable_web_page_preview": True,
             "reply_markup": markup
         }
-        resp = await call_tg_bot_api("sendPhoto", payload)
-        
-        if not resp or not resp.get("ok"):
-            payload = {
-                "chat_id": message.chat.id,
-                "text": caption,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True,
-                "reply_markup": markup
-            }
-            resp = await call_tg_bot_api("sendMessage", payload)
+        resp = await call_tg_bot_api("sendMessage", text_payload)
 
+        # Text message par exact corner reaction aur blast
         if resp and resp.get("ok"):
             bot_msg_id = resp["result"]["message_id"]
             await asyncio.sleep(0.4)
@@ -248,10 +246,10 @@ async def help_handler(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex("^open_commands$"))
 async def commands_callback(client: Client, query: CallbackQuery):
-    await call_tg_bot_api("editMessageCaption" if query.message.photo else "editMessageText", {
+    await call_tg_bot_api("editMessageText", {
         "chat_id": query.message.chat.id,
         "message_id": query.message.id,
-        "caption" if query.message.photo else "text": HELP_TEXT,
+        "text": HELP_TEXT,
         "parse_mode": "HTML",
         "reply_markup": get_commands_menu()
     })
@@ -264,10 +262,10 @@ async def formatting_callback(client: Client, query: CallbackQuery):
             [{"text": "« Back To Modules", "callback_data": "open_commands", "style": "success"}]
         ]
     }
-    await call_tg_bot_api("editMessageCaption" if query.message.photo else "editMessageText", {
+    await call_tg_bot_api("editMessageText", {
         "chat_id": query.message.chat.id,
         "message_id": query.message.id,
-        "caption" if query.message.photo else "text": FORMATTING_GUIDE_TEXT,
+        "text": FORMATTING_GUIDE_TEXT,
         "parse_mode": "HTML",
         "reply_markup": back_btn
     })
@@ -280,10 +278,10 @@ async def back_start_callback(client: Client, query: CallbackQuery):
     mention = f"<a href='tg://user?id={query.from_user.id}'>{first_name}</a>"
     caption = DM_START_TEXT.format(mention=mention)
     
-    await call_tg_bot_api("editMessageCaption" if query.message.photo else "editMessageText", {
+    await call_tg_bot_api("editMessageText", {
         "chat_id": query.message.chat.id,
         "message_id": query.message.id,
-        "caption" if query.message.photo else "text": caption,
+        "text": caption,
         "parse_mode": "HTML",
         "reply_markup": get_start_markup(bot.username)
     })
@@ -350,10 +348,10 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
         ]
     }
     
-    await call_tg_bot_api("editMessageCaption" if query.message.photo else "editMessageText", {
+    await call_tg_bot_api("editMessageText", {
         "chat_id": query.message.chat.id,
         "message_id": query.message.id,
-        "caption" if query.message.photo else "text": text,
+        "text": text,
         "parse_mode": "HTML",
         "reply_markup": back_btn
     })
