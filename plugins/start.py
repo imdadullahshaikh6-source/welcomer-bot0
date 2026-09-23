@@ -12,7 +12,6 @@ START_PHOTO_URL = "https://graph.org/file/d3a2c17942e606f4ec811-9c0373fa8bb10f44
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Official Bot API Caller jo Custom Buttons (Colors) aur Big Blast Reactions trigger karta hai
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -31,16 +30,17 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
 
     return await asyncio.to_thread(_sync)
 
-# Ultra Aesthetic DM Caption (Owner line removed)
+# Complete & Clean DM Text (Welcome feature included, Owner text removed)
 DM_START_TEXT = (
     "<blockquote>✨ <b>HEY BABY</b>\n"
     "YOUR VIBES SEEM SO FINE TODAY  {mention} 🥀</blockquote>\n\n"
     "<blockquote>🌸 <b>THIS IS ZOYA</b> 💖\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
     "Main aapke group ki <b>Smart & Aesthetic Manager</b> hoon!\n\n"
+    "✨ <i>Custom aesthetic welcomes</i>\n"
     "🛡️ <i>Group protection & silent moderation</i>\n"
     "🎮 <i>Mini games & Couple matcher</i>\n"
-    "🎨 <i>Quotly, Sticker kang & AFK vibes</i>\n\n"
+    "💬 <i>AFK system & anti-spam vibes</i>\n\n"
     "Niche diye buttons se explore karein:</blockquote>"
 )
 
@@ -358,4 +358,4 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
         "reply_markup": back_btn
     })
     await query.answer()
-                       
+    
