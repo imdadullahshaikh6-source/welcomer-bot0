@@ -3,71 +3,52 @@ from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus
 from pyrogram.errors import RPCError
 
-async def scan_bot_pin_permissions(client: Client, chat_id: int):
-    """
-    Scans bot's actual admin status and specific 'can_pin_messages' right.
-    Returns: (status: bool, error_code: str)
-    """
+async def is_user_admin(client: Client, chat_id: int, user_id: int) -> bool:
     try:
-        me = await client.get_chat_member(chat_id, "me")
-        if me.status == ChatMemberStatus.OWNER:
-            return True, "ok"
-        if me.status == ChatMemberStatus.ADMINISTRATOR:
-            if me.privileges and me.privileges.can_pin_messages:
-                return True, "ok"
-            return False, "no_permission"
-        return False, "not_admin"
+        m = await client.get_chat_member(chat_id, user_id)
+        if m.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
+            return True
+        return False
     except Exception:
-        return False, "not_admin"
-
-async def check_admin_sender(client: Client, message):
-    if message.sender_chat and message.sender_chat.id == message.chat.id:
-        return True, True
-    if not message.from_user:
-        return False, False
-    try:
-        m = await client.get_chat_member(message.chat.id, message.from_user.id)
-        if m.status == ChatMemberStatus.OWNER:
-            return True, True
-        if m.status == ChatMemberStatus.ADMINISTRATOR:
-            can_pin = bool(m.privileges and m.privileges.can_pin_messages)
-            return True, can_pin
-    except Exception:
-        return True, True
-    return False, False
+        # Fallback true taaki false-rejection na ho
+        return True
 
 @Client.on_message(filters.command(["pin", "unpin"], prefixes=[".", "/"]) & filters.group)
-async def pin_unpin_command(client: Client, message):
-    # 1. SCAN BOT ADMIN & PIN PERMISSION
-    bot_has_right, bot_reason = await scan_bot_pin_permissions(client, message.chat.id)
-    if not bot_has_right:
-        if bot_reason == "not_admin":
+async def pin_unpin_handler(client: Client, message):
+    chat_id = message.chat.id
+
+    # 1. Check Bot's own rights
+    try:
+        me = await client.get_chat_member(chat_id, "me")
+        if me.status not in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
             return await message.reply_text(
                 "<blockquote>⚠️ <b>I am not Admin!</b>\n"
-                "Is command ko chalane ke liye pehle mujhe group me Admin banayein!</blockquote>",
+                "Mujhe message pin karne ke liye pehle group me Admin banayein!</blockquote>",
                 parse_mode=ParseMode.HTML
             )
-        elif bot_reason == "no_permission":
+        if me.status == ChatMemberStatus.ADMINISTRATOR and me.privileges and not me.privileges.can_pin_messages:
             return await message.reply_text(
                 "<blockquote>⚠️ <b>Permission Missing!</b>\n"
-                "Main group me admin hoon, lekin mere paas <b>'Pin Messages'</b> ka right band hai. Kripya mujhe permission dein!</blockquote>",
+                "Mere paas <b>'Pin Messages'</b> ka right band hai. Kripya admin settings me jaakar use allow karein!</blockquote>",
                 parse_mode=ParseMode.HTML
             )
+    except Exception as e:
+        pass
 
-    # 2. SCAN SENDER ADMIN & PIN PERMISSION
-    is_admin, can_pin = await check_admin_sender(client, message)
-    if not is_admin:
+    # 2. Check Sender's admin status
+    sender_id = message.from_user.id if message.from_user else (message.sender_chat.id if message.sender_chat else 0)
+    if message.sender_chat and message.sender_chat.id == chat_id:
+        is_adm = True
+    else:
+        is_adm = await is_user_admin(client, chat_id, sender_id)
+
+    if not is_adm:
         return await message.reply_text(
             "<blockquote>❌ <b>Permission Denied!</b>\nSirf group Admins hi message pin/unpin kar sakte hain!</blockquote>",
             parse_mode=ParseMode.HTML
         )
-    if not can_pin:
-        return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b>\nAapke paas 'Pin Messages' ka right nahi hai!</blockquote>",
-            parse_mode=ParseMode.HTML
-        )
 
-    # 3. REPLY CHECK
+    # 3. Check Reply
     if not message.reply_to_message:
         return await message.reply_text(
             "<blockquote>⚠️ <b>Usage:</b> Jis message ko pin ya unpin karna hai, uspar reply karke <code>.pin</code> ya <code>.unpin</code> likhein!</blockquote>",
@@ -75,16 +56,24 @@ async def pin_unpin_command(client: Client, message):
         )
 
     cmd = message.command[0].lower()
+    target_msg_id = message.reply_to_message.id
+
     try:
         if cmd == "pin":
-            # notify parameter False rakhte hain taaki members spam na ho
-            await message.reply_to_message.pin(both_sides=True)
+            await client.pin_chat_message(
+                chat_id=chat_id,
+                message_id=target_msg_id,
+                both_sides=True
+            )
             await message.reply_text(
                 "<blockquote>📌 <b>Message successfully pinned!</b></blockquote>",
                 parse_mode=ParseMode.HTML
             )
         else:
-            await message.reply_to_message.unpin()
+            await client.unpin_chat_message(
+                chat_id=chat_id,
+                message_id=target_msg_id
+            )
             await message.reply_text(
                 "<blockquote>📌 <b>Message successfully unpinned!</b></blockquote>",
                 parse_mode=ParseMode.HTML
@@ -96,7 +85,7 @@ async def pin_unpin_command(client: Client, message):
         )
     except Exception as e:
         await message.reply_text(
-            f"<blockquote>⚠️ <b>Failed:</b> <code>{html.escape(str(e))}</code></blockquote>",
+            f"<blockquote>⚠️ <b>Pin Failed:</b> <code>{html.escape(str(e))}</code></blockquote>",
             parse_mode=ParseMode.HTML
         )
-      
+        
