@@ -11,7 +11,6 @@ except ImportError:
     try:
         from word_data import WORDS_4, WORDS_5, WORDS_6
     except ImportError:
-        # Emergency fallback agar word_data file abhi na bani ho
         WORDS_4 = ["SPIN", "GRID", "FINE", "SHIN", "LOVE", "FIRE", "STAR", "GAME"]
         WORDS_5 = ["HEART", "LIGHT", "NIGHT", "DREAM", "SMILE", "WATER", "MUSIC"]
         WORDS_6 = ["FRIEND", "SPRING", "SUMMER", "WINTER", "FLOWER", "CASTLE"]
@@ -111,8 +110,8 @@ async def start_wordseek(client: Client, message: Message):
     asyncio.create_task(auto_stop_timer(client, chat_id, duration_sec, secret))
     await message.reply(f"<blockquote>🎮 <b>Started new{size} wordseek!</b></blockquote>")
 
-# Supergroups & Groups Message Evaluator (group=0)
-@Client.on_message((filters.group | filters.supergroup) & filters.text & ~filters.bot, group=0)
+# Pyrogram me filters.group hi groups aur supergroups dono ke liye standard hota hai
+@Client.on_message(filters.group & filters.text & ~filters.bot, group=0)
 async def wordseek_guess_checker(client: Client, message: Message):
     chat_id = message.chat.id
     if chat_id not in GAMES:
@@ -123,7 +122,7 @@ async def wordseek_guess_checker(client: Client, message: Message):
 
     guess = message.text.strip().upper()
 
-    # Commands ya multiple words ignore karein
+    # Commands aur multiple words ignore karein
     if guess.startswith(("/", ".", "!", "#")) or len(guess.split()) > 1:
         return
 
