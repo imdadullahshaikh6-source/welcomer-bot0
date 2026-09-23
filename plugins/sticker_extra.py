@@ -13,33 +13,50 @@ QUOTLY_ENDPOINTS = [
     "https://quote.yuri.ly/generate"
 ]
 
-def make_quotly(payload: dict):
+def generate_quotly_sticker(payload: dict) -> io.BytesIO:
     data = json.dumps(payload).encode("utf-8")
+    raw_response = None
+
     for url in QUOTLY_ENDPOINTS:
         try:
             req = urllib.request.Request(
                 url,
                 data=data,
-                headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0"
+                }
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 if resp.status == 200:
-                    res_json = json.loads(resp.read().decode("utf-8"))
-                    if res_json.get("ok"):
-                        img_bytes = base64.b64decode(res_json["result"]["image"])
-                        img = Image.open(io.BytesIO(img_bytes))
-                        img.thumbnail((512, 512))
-                        bio = io.BytesIO()
-                        bio.name = "sticker.webp"
-                        img.save(bio, format="WEBP")
-                        bio.seek(0)
-                        return bio
+                    raw_response = resp.read()
+                    break
         except Exception:
             continue
-    return None
+
+    if not raw_response:
+        return None
+
+    try:
+        res_json = json.loads(raw_response.decode("utf-8"))
+        if not res_json.get("ok"):
+            return None
+
+        image_bytes = base64.b64decode(res_json["result"]["image"])
+        img = Image.open(io.BytesIO(image_bytes))
+        img.thumbnail((512, 512))
+
+        bio = io.BytesIO()
+        bio.name = "sticker.webp"
+        img.save(bio, format="WEBP")
+        bio.seek(0)
+        return bio
+    except Exception:
+        return None
 
 
-@Client.on_message(filters.command(["qr"], prefixes=[".", "/"]) & filters.group)
+# ==================== .qr (QUOTE REPLY) ==================== #
+@Client.on_message(filters.command(["qr"], prefixes=[".", "/", "!"]))
 async def quote_reply_cmd(client: Client, message: Message):
     reply = message.reply_to_message
     if not reply:
@@ -100,7 +117,7 @@ async def quote_reply_cmd(client: Client, message: Message):
     }
 
     try:
-        sticker_file = await client.loop.run_in_executor(None, make_quotly, payload)
+        sticker_file = await client.loop.run_in_executor(None, generate_quotly_sticker, payload)
         if not sticker_file:
             return await message.reply_text("<blockquote>❌ <b>Quote API response nahi de rahi!</b></blockquote>")
 
@@ -111,4 +128,4 @@ async def quote_reply_cmd(client: Client, message: Message):
         )
     except Exception as e:
         await message.reply_text(f"<blockquote>❌ <b>Error:</b> {e}</blockquote>")
-      
+        
