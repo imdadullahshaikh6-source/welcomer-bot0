@@ -9,16 +9,18 @@ from pyrogram.types import (
     InlineKeyboardButton,
 )
 
-async def get_admin_privileges(client: Client, user_id: int, chat_id: int):
+async def is_admin_or_owner(client: Client, chat_id: int, user_id: int):
     try:
-        m = await client.get_chat_member(chat_id, user_id)
-        if m.status == ChatMemberStatus.OWNER:
-            return True, "owner"
-        if m.status == ChatMemberStatus.ADMINISTRATOR:
-            return True, m.privileges
-        return False, None
+        member = await client.get_chat_member(chat_id, user_id)
+        if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
+            # Owner ke paas full right hota hai, admin ke privileges check karo
+            if member.status == ChatMemberStatus.OWNER:
+                return True
+            if member.privileges and member.privileges.can_restrict_members:
+                return True
+        return False
     except Exception:
-        return False, None
+        return False
 
 async def extract_target_user(client: Client, message: Message):
     if message.reply_to_message:
@@ -57,27 +59,23 @@ def get_user_mention(user):
     return "User"
 
 # ==================== MUTE ====================
-@Client.on_message(filters.command(["mute"], prefixes=[".", "/"]) & filters.group)
+@Client.on_message(filters.command(["mute", "dmute"], prefixes=[".", "/"]) & filters.group)
 async def mute_command(client: Client, message: Message):
     if not message.from_user:
         return
 
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-
-    # Check Restrict Members Permission
-    if privs != "owner" and not (privs and privs.can_restrict_members):
+    # Check Admin Right
+    can_mute = await is_admin_or_owner(client, message.chat.id, message.from_user.id)
+    if not can_mute:
         return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b>\n"
-            "Aapke paas members ko mute karne ka right (Ban Users) nahi hai!</blockquote>",
+            "<blockquote>❌ <b>Permission Denied!</b>\nAapke paas members ko mute/restrict karne ka right nahi hai!</blockquote>",
             parse_mode=ParseMode.HTML,
         )
 
     target = await extract_target_user(client, message)
     if not target:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b>\n<code>.mute @username</code></blockquote>",
+            "<blockquote>⚠️ <b>Kisi user/bot ke message par reply karein ya tag karein:</b>\n<code>.mute @username</code></blockquote>",
             parse_mode=ParseMode.HTML,
         )
 
@@ -85,23 +83,35 @@ async def mute_command(client: Client, message: Message):
     if target.id == bot.id:
         return await message.reply_text("<blockquote>🥺 Main khud ko mute nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
 
-    target_is_adm, _ = await get_admin_privileges(client, target.id, message.chat.id)
-    if target_is_adm:
-        return await message.reply_text("<blockquote>❌ <b>Admin ko mute nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
+    # Admin check on target
+    try:
+        t_member = await client.get_chat_member(message.chat.id, target.id)
+        if t_member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
+            return await message.reply_text("<blockquote>❌ <b>Admin ko mute nahi kiya ja sakta!</b></blockquote>", parse_mode=ParseMode.HTML)
+    except Exception:
+        pass
 
     try:
+        # User message permissions band karna
         await client.restrict_chat_member(
             chat_id=message.chat.id,
             user_id=target.id,
             permissions=ChatPermissions(can_send_messages=False),
         )
+
+        if message.command[0].lower() == "dmute" and message.reply_to_message:
+            try:
+                await message.reply_to_message.delete()
+            except Exception:
+                pass
+
         mention = get_user_mention(target)
         btn = InlineKeyboardMarkup([[InlineKeyboardButton("🔊 Unmute Member", callback_data=f"adm_unmute_{target.id}")]])
 
         await message.reply_text(
             f"<blockquote>🤐 <b>Muted!</b>\n"
             f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
-            f"👤 <b>User:</b> {mention}\n"
+            f"👤 <b>User:</b> {mention} [<code>{target.id}</code>]\n"
             f"🔇 <i>Message permissions band kar di gayi hain!</i></blockquote>",
             reply_markup=btn,
             parse_mode=ParseMode.HTML,
@@ -118,15 +128,10 @@ async def unmute_command(client: Client, message: Message):
     if not message.from_user:
         return
 
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-
-    # Check Restrict Members Permission
-    if privs != "owner" and not (privs and privs.can_restrict_members):
+    can_unmute = await is_admin_or_owner(client, message.chat.id, message.from_user.id)
+    if not can_unmute:
         return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b>\n"
-            "Aapke paas members ko unmute karne ka right (Ban Users) nahi hai!</blockquote>",
+            "<blockquote>❌ <b>Permission Denied!</b>\nAapke paas members ko unmute karne ka right nahi hai!</blockquote>",
             parse_mode=ParseMode.HTML,
         )
 
@@ -155,7 +160,7 @@ async def unmute_command(client: Client, message: Message):
             f"<blockquote>🔊 <b>Unmuted!</b>\n"
             f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
             f"👤 <b>User:</b> {mention}\n"
-            f"💬 <i>Restrictions hata di gayi hain, ab messages bhej sakte hain!</i></blockquote>",
+            f"💬 <i>Ab messages bhej sakte hain!</i></blockquote>",
             parse_mode=ParseMode.HTML,
         )
     except Exception as e:
@@ -170,13 +175,9 @@ async def unmute_button_callback(client: Client, query: CallbackQuery):
     target_id = int(query.data.split("_")[2])
     chat_id = query.message.chat.id
 
-    is_adm, privs = await get_admin_privileges(client, query.from_user.id, chat_id)
-    if not is_adm:
+    can_unmute = await is_admin_or_owner(client, chat_id, query.from_user.id)
+    if not can_unmute:
         return await query.answer("❌ Sirf Admins hi yeh button use kar sakte hain!", show_alert=True)
-
-    # Check Restrict Members Permission on Button Click
-    if privs != "owner" and not (privs and privs.can_restrict_members):
-        return await query.answer("❌ Aapke paas members ko unmute karne ka right nahi hai!", show_alert=True)
 
     try:
         chat = await client.get_chat(chat_id)
@@ -198,4 +199,4 @@ async def unmute_button_callback(client: Client, query: CallbackQuery):
         )
     except Exception as e:
         await query.answer(f"Error: {e}", show_alert=True)
-          
+        
