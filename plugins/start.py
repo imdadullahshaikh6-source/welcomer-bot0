@@ -7,14 +7,12 @@ from pyrogram.types import Message, CallbackQuery
 
 OWNER_USERNAME = "Ownerbackk"
 SUPPORT_GROUP_URL = "https://t.me/+UCmLt1cgPhI1MjFl"
-
-# Nayi Aesthetic Zoya Banner Photo
 START_PHOTO_URL = "https://graph.org/file/d3a2c17942e606f4ec811-9c0373fa8bb10f4448.jpg"
 
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Bot API HTTP Caller jo Button Colors (style) aur Full-Screen Big Reactions handle karta hai
+# Official Bot API Caller jo Custom Buttons (Colors) aur Big Blast Reactions trigger karta hai
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -33,20 +31,19 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
 
     return await asyncio.to_thread(_sync)
 
-# Aesthetic Zoya Intro for Private DM
+# Ultra Aesthetic DM Caption (Owner line removed)
 DM_START_TEXT = (
-    "<blockquote>🌸 <b>Hey {mention}!! I'm Zoya</b> 💖\n"
+    "<blockquote>✨ <b>HEY BABY</b>\n"
+    "YOUR VIBES SEEM SO FINE TODAY  {mention} 🥀</blockquote>\n\n"
+    "<blockquote>🌸 <b>THIS IS ZOYA</b> 💖\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
     "Main aapke group ki <b>Smart & Aesthetic Manager</b> hoon!\n\n"
-    "✨ <i>Custom aesthetic welcomes</i>\n"
     "🛡️ <i>Group protection & silent moderation</i>\n"
     "🎮 <i>Mini games & Couple matcher</i>\n"
-    "💬 <i>AFK system & anti-spam vibes</i>\n\n"
-    f"👑 <b>Owner:</b> @{OWNER_USERNAME}\n\n"
+    "🎨 <i>Quotly, Sticker kang & AFK vibes</i>\n\n"
     "Niche diye buttons se explore karein:</blockquote>"
 )
 
-# Cute Zoya Intro when /start is used in Groups
 GROUP_START_TEXT = (
     "<blockquote>✨ <b>Zoya is active here!</b> 🎀\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
@@ -76,17 +73,13 @@ FORMATTING_GUIDE_TEXT = (
     "<code>[Button Title](https://t.me/link)</code>\n"
     "• <i>Alag-Alag Rows (Line change karein):</i>\n"
     "<code>[Music](https://t.me/link)</code>\n"
-    "<code>[Helpline](https://t.me/link)</code>\n"
-    "• <i>Ek Hi Line Mein Do Buttons:</i>\n"
-    "<code>[Channel](https://t.me/link) [Group](https://t.me/link)</code>\n\n"
-    "🎨 <b>4. Quotes Format (Expandable):</b>\n"
-    "• Bot automatically captions ko stylish <code>&lt;blockquote expandable&gt;</code> mein wrap kar deta hai.\n\n"
+    "<code>[Helpline](https://t.me/link)</code>\n\n"
+    "🎨 <b>4. Quotes Format:</b>\n"
+    "• Bot automatically captions ko stylish <code>&lt;blockquote&gt;</code> mein wrap kar deta hai.\n\n"
     "🛡️ <b>5. Moderation Format:</b>\n"
-    "• Reply karke: <code>.ban</code> | <code>.unban</code> | <code>.mute</code>\n"
-    "• Tag karke: <code>.ban @username</code> ya <code>.ban Noor</code></blockquote>"
+    "• Reply karke: <code>.ban</code> | <code>.unban</code> | <code>.mute</code></blockquote>"
 )
 
-# First Page Layout (Green Stylish Buttons)
 def get_start_markup(bot_username: str):
     owner_url = f"https://t.me/{OWNER_USERNAME}"
     add_bot_url = f"https://t.me/{bot_username}?startgroup=true"
@@ -118,7 +111,6 @@ def get_group_markup(bot_username: str):
         ]
     }
 
-# Commands Menu: 2x2 Clean Layout + Formatting Guide
 def get_commands_menu():
     return {
         "inline_keyboard": [
@@ -142,23 +134,19 @@ def get_commands_menu():
 
 @Client.on_message(filters.command("start", prefixes=["/", "."]))
 async def start_handler(client: Client, message: Message):
-    # 1. User ke /start par Heart big animation reaction
-    try:
-        user_reaction_payload = {
+    asyncio.create_task(
+        call_tg_bot_api("setMessageReaction", {
             "chat_id": message.chat.id,
             "message_id": message.id,
             "reaction": [{"type": "emoji", "emoji": "❤️"}],
             "is_big": True
-        }
-        await call_tg_bot_api("setMessageReaction", user_reaction_payload)
-    except Exception:
-        pass
+        })
+    )
 
     bot = await client.get_me()
     first_name = message.from_user.first_name or "Friend"
     mention = f"<a href='tg://user?id={message.from_user.id}'>{first_name}</a>"
 
-    # Agar start argument 'help' ho
     if len(message.command) > 1 and message.command[1].lower() == "help":
         payload = {
             "chat_id": message.chat.id,
@@ -168,10 +156,10 @@ async def start_handler(client: Client, message: Message):
         }
         resp = await call_tg_bot_api("sendMessage", payload)
         if resp and resp.get("ok"):
-            bot_msg_id = resp["result"]["message_id"]
+            await asyncio.sleep(0.3)
             await call_tg_bot_api("setMessageReaction", {
                 "chat_id": message.chat.id,
-                "message_id": bot_msg_id,
+                "message_id": resp["result"]["message_id"],
                 "reaction": [{"type": "emoji", "emoji": "🔥"}],
                 "is_big": True
             })
@@ -181,7 +169,6 @@ async def start_handler(client: Client, message: Message):
         caption = DM_START_TEXT.format(mention=mention)
         markup = get_start_markup(bot.username)
         
-        # Photo ke sath bhejna (Banner ke sath)
         payload = {
             "chat_id": message.chat.id,
             "photo": START_PHOTO_URL,
@@ -191,7 +178,6 @@ async def start_handler(client: Client, message: Message):
         }
         resp = await call_tg_bot_api("sendPhoto", payload)
         
-        # Fallback agar photo send na ho sake
         if not resp or not resp.get("ok"):
             payload = {
                 "chat_id": message.chat.id,
@@ -202,19 +188,15 @@ async def start_handler(client: Client, message: Message):
             }
             resp = await call_tg_bot_api("sendMessage", payload)
 
-        # 2. Bot ke apne photo message par big flame blast reaction
         if resp and resp.get("ok"):
             bot_msg_id = resp["result"]["message_id"]
-            try:
-                bot_reaction_payload = {
-                    "chat_id": message.chat.id,
-                    "message_id": bot_msg_id,
-                    "reaction": [{"type": "emoji", "emoji": "🔥"}],
-                    "is_big": True
-                }
-                await call_tg_bot_api("setMessageReaction", bot_reaction_payload)
-            except Exception:
-                pass
+            await asyncio.sleep(0.4)
+            await call_tg_bot_api("setMessageReaction", {
+                "chat_id": message.chat.id,
+                "message_id": bot_msg_id,
+                "reaction": [{"type": "emoji", "emoji": "🔥"}],
+                "is_big": True
+            })
     else:
         caption = GROUP_START_TEXT.format(mention=mention)
         markup = get_group_markup(bot.username)
@@ -229,7 +211,6 @@ async def start_handler(client: Client, message: Message):
         }
         await call_tg_bot_api("sendMessage", payload)
 
-# /help Command Handler (DM me direct commands khulega)
 @Client.on_message(filters.command("help", prefixes=["/", "."]))
 async def help_handler(client: Client, message: Message):
     bot = await client.get_me()
@@ -245,10 +226,10 @@ async def help_handler(client: Client, message: Message):
         }
         resp = await call_tg_bot_api("sendMessage", payload)
         if resp and resp.get("ok"):
-            bot_msg_id = resp["result"]["message_id"]
+            await asyncio.sleep(0.3)
             await call_tg_bot_api("setMessageReaction", {
                 "chat_id": message.chat.id,
-                "message_id": bot_msg_id,
+                "message_id": resp["result"]["message_id"],
                 "reaction": [{"type": "emoji", "emoji": "🔥"}],
                 "is_big": True
             })
@@ -377,4 +358,4 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
         "reply_markup": back_btn
     })
     await query.answer()
-    
+                       
