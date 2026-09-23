@@ -23,6 +23,7 @@ def check_guess_colors(guess: str, secret: str):
     Green  = Correct letter & position
     Orange = Correct letter & wrong position
     Red    = Letter not present in word
+    Har color block ke beech clean space
     """
     n = len(secret)
     result = ["🟥"] * n
@@ -42,12 +43,12 @@ def check_guess_colors(guess: str, secret: str):
             result[i] = "🟧"
             secret_chars[secret_chars.index(guess_chars[i])] = None
 
-    return "".join(result)
+    return " ".join(result)
 
 def format_board(game):
     lines = [
         "<blockquote><b>WordSeek</b>",
-        f"<i>{game['size']}-letter mode • {len(game['history'])}/30</i>\n"
+        f"<b>{game['size']}-letter mode</b>  •  <b>{len(game['history'])}/30</b>\n"
     ]
     for h in game["history"]:
         lines.append(f"{h['colors']}   <b>{h['word']}</b>")
@@ -76,12 +77,12 @@ async def start_wordseek(client: Client, message: Message):
         remaining = int(GAMES[chat_id]["end_time"] - time.time())
         if remaining > 0:
             await message.reply(
-                f"<blockquote>⚠️ There is already a game in progress in this chat.\nTime remaining: <b>{remaining}s</b></blockquote>",
+                f"<blockquote>⚠️ There is already a game in progress in this chat. Use <code>.end</code> to stop it.\nTime remaining: <b>{remaining}s</b></blockquote>",
                 quote=True
             )
             return
 
-    # Mode, Timer aur Secret Word Selection
+    # Mode selection
     if cmd in ["new", "new5"]:
         size = 5
         minutes = 8
@@ -110,7 +111,18 @@ async def start_wordseek(client: Client, message: Message):
     asyncio.create_task(auto_stop_timer(client, chat_id, duration_sec, secret))
     await message.reply(f"<blockquote>🎮 <b>Started new{size} wordseek!</b></blockquote>")
 
-# Pyrogram me filters.group hi groups aur supergroups dono ke liye standard hota hai
+# Game end command (.end / /end) - Secret word reveal nahi hoga
+@Client.on_message(filters.command(["end", "stopgame"], prefixes=["/", "."]))
+async def end_wordseek(client: Client, message: Message):
+    chat_id = message.chat.id
+    if chat_id not in GAMES:
+        await message.reply("<blockquote>There is no active game to end.</blockquote>", quote=True)
+        return
+
+    GAMES.pop(chat_id)
+    await message.reply("<blockquote>🛑 <b>Game ended.</b></blockquote>", quote=True)
+
+# Active chat message listener
 @Client.on_message(filters.group & filters.text & ~filters.bot, group=0)
 async def wordseek_guess_checker(client: Client, message: Message):
     chat_id = message.chat.id
@@ -122,7 +134,7 @@ async def wordseek_guess_checker(client: Client, message: Message):
 
     guess = message.text.strip().upper()
 
-    # Commands aur multiple words ignore karein
+    # Commands ya multiple words ignore karein
     if guess.startswith(("/", ".", "!", "#")) or len(guess.split()) > 1:
         return
 
@@ -159,7 +171,7 @@ async def wordseek_guess_checker(client: Client, message: Message):
 
     board_text = format_board(game)
 
-    # WIN CASE
+    # WIN CHECK
     if guess == secret:
         GAMES.pop(chat_id)
         mention = message.from_user.mention if message.from_user else "Winner"
@@ -171,7 +183,7 @@ async def wordseek_guess_checker(client: Client, message: Message):
         await message.reply(win_text, quote=True)
         return
 
-    # MAX GUESS REACHED CASE
+    # MAX GUESSES REACHED
     if len(game["history"]) >= game["max_guesses"]:
         GAMES.pop(chat_id)
         lose_text = (
