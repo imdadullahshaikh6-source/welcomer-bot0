@@ -158,6 +158,73 @@ async def warn_command(client: Client, message: Message):
         parse_mode=ParseMode.HTML,
     )
 
+# ==================== UNWARN (LAST WARN REMOVE / -1) ====================
+@Client.on_message(filters.command(["unwarn"], prefixes=[".", "/"]) & filters.group)
+async def unwarn_command(client: Client, message: Message):
+    is_adm = await check_admin_sender(client, message)
+    if not is_adm:
+        return await message.reply_text("<blockquote>❌ Sirf Admins hi unwarn kar sakte hain!</blockquote>", parse_mode=ParseMode.HTML)
+
+    target = await extract_target(client, message)
+    if not target:
+        return await message.reply_text("<blockquote>⚠️ <b>User ke message par reply karein ya tag karein:</b>\n<code>.unwarn @username</code></blockquote>", parse_mode=ParseMode.HTML)
+
+    if warns_db is None:
+        return await message.reply_text("<blockquote>⚠️ Database connected nahi hai!</blockquote>", parse_mode=ParseMode.HTML)
+
+    doc = await warns_db.find_one({"chat_id": message.chat.id, "user_id": target.id})
+    if not doc or doc.get("count", 0) <= 0:
+        return await message.reply_text("<blockquote>ℹ️ Is user ke paas pehle se koi warning nahi hai!</blockquote>", parse_mode=ParseMode.HTML)
+
+    current_warns = doc.get("count", 1) - 1
+    target_mention = get_user_mention(target)
+
+    if current_warns <= 0:
+        await warns_db.delete_one({"chat_id": message.chat.id, "user_id": target.id})
+        await message.reply_text(
+            f"<blockquote>✅ <b>Last Warn Removed!</b>\n"
+            f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"👤 <b>User:</b> {target_mention}\n"
+            f"✨ <i>Ab user ke paas 0 warnings hain (Database Cleared)!</i></blockquote>",
+            parse_mode=ParseMode.HTML
+        )
+    else:
+        await warns_db.update_one(
+            {"chat_id": message.chat.id, "user_id": target.id},
+            {"$set": {"count": current_warns}}
+        )
+        await message.reply_text(
+            f"<blockquote>✅ <b>Last Warn Removed!</b>\n"
+            f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"👤 <b>User:</b> {target_mention}\n"
+            f"📊 <b>Remaining Warnings:</b> {current_warns}/{MAX_WARNS}\n"
+            f"💾 <i>Updated in Database</i></blockquote>",
+            parse_mode=ParseMode.HTML
+        )
+
+# ==================== RMWARN / RESETWARNS (TOTAL CLEAN) ====================
+@Client.on_message(filters.command(["rmwarn", "resetwarns", "resetwarn"], prefixes=[".", "/"]) & filters.group)
+async def rmwarn_command(client: Client, message: Message):
+    is_adm = await check_admin_sender(client, message)
+    if not is_adm:
+        return await message.reply_text("<blockquote>❌ Sirf Admins hi warnings remove kar sakte hain!</blockquote>", parse_mode=ParseMode.HTML)
+
+    target = await extract_target(client, message)
+    if not target:
+        return await message.reply_text("<blockquote>⚠️ <b>User par reply karein ya tag karein:</b>\n<code>.rmwarn @username</code></blockquote>", parse_mode=ParseMode.HTML)
+
+    if warns_db is not None:
+        await warns_db.delete_one({"chat_id": message.chat.id, "user_id": target.id})
+
+    target_mention = get_user_mention(target)
+    await message.reply_text(
+        f"<blockquote>🔄 <b>All Warnings Removed!</b>\n"
+        f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+        f"👤 <b>User:</b> {target_mention}\n"
+        f"✨ <i>User ki saari warnings database se delete kar di gayi hain!</i></blockquote>",
+        parse_mode=ParseMode.HTML
+    )
+
 # ==================== RESET WARNS BUTTON ====================
 @Client.on_callback_query(filters.regex(r"^adm_resetwarn_(\d+)$"))
 async def reset_warns_callback(client: Client, query: CallbackQuery):
@@ -179,5 +246,5 @@ async def reset_warns_callback(client: Client, query: CallbackQuery):
         f"👤 <b>Target ID:</b> <code>{target_id}</code>\n"
         f"✨ <i>Warnings removed by <a href='tg://user?id={query.from_user.id}'>{admin_name}</a>!</i></blockquote>",
         parse_mode=ParseMode.HTML,
-    )
+        )
     
