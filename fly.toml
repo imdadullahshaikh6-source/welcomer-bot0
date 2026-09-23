@@ -1,0 +1,13 @@
+app = "zoya"
+primary_region = "ams"
+
+[build]
+
+[experimental]
+  auto_stop_machines = false
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
+  
