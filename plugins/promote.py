@@ -10,68 +10,64 @@ from pyrogram.types import (
 )
 from pyrogram.errors import RPCError
 
-# Custom Font Converter (Duke Style Small Caps)
-FONT_MAP = {
-    'a': 'ᴀ', 'b': 'ʙ', 'c': 'ᴄ', 'd': 'ᴅ', 'e': 'ᴇ', 'f': 'ғ', 'g': 'ɢ',
-    'h': 'ʜ', 'i': 'ɪ', 'j': 'ᴊ', 'k': 'ᴋ', 'l': 'ʟ', 'm': 'ᴍ', 'n': 'ɴ',
-    'o': 'ᴏ', 'p': 'ᴘ', 'q': 'ǫ', 'r': 'ʀ', 's': 's', 't': 'ᴛ', 'u': 'ᴜ',
-    'v': 'ᴠ', 'w': 'ᴡ', 'x': 'x', 'y': 'ʏ', 'z': 'ᴢ',
-    'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'F', 'G': 'G',
-    'H': 'H', 'I': 'I', 'J': 'J', 'K': 'K', 'L': 'L', 'M': 'M', 'N': 'N',
-    'O': 'O', 'P': 'P', 'Q': 'Q', 'R': 'R', 'S': 'S', 'T': 'T', 'U': 'U',
-    'V': 'V', 'W': 'W', 'X': 'X', 'Y': 'Y', 'Z': 'Z'
-}
-
-def to_duke_font(text: str) -> str:
-    return "".join(FONT_MAP.get(c, c) for c in text)
-
-# Session Store
+# In-memory sessions
 PROMOTE_SESSIONS = {}
 
-RIGHTS_CONFIG = {
-    1: [
-        ("can_change_info", "Change Info"),
-        ("can_delete_messages", "Delete Msgs"),
-        ("can_invite_users", "Invite Users"),
-        ("can_restrict_members", "Ban Users"),
-    ],
-    2: [
-        ("can_pin_messages", "Pin Msgs"),
-        ("can_manage_video_chats", "Manage Video"),
-        ("can_promote_members", "Add Admins"),
-        ("can_manage_topics", "Manage Topics"),
-    ],
-    3: [
-        ("can_post_stories", "Post Stories"),
-        ("can_edit_stories", "Edit Stories"),
-        ("can_delete_stories", "Delete Stories"),
-    ]
-}
+# Exact permissions list according to your settings
+PERMISSIONS_MAP = [
+    ("can_change_info", "Change Info"),
+    ("can_delete_messages", "Delete Messages"),
+    ("can_restrict_members", "Ban Users"),
+    ("can_invite_users", "Add Users"),
+    ("can_pin_messages", "Pin Messages"),
+    ("can_manage_video_chats", "Manage Live Streams"),
+    ("can_promote_members", "Add New Admins"),
+    ("is_anonymous", "Remain Anonymous"),
+    ("can_post_stories", "Manage Stories"),
+]
 
-DEFAULT_RIGHTS = {
-    "can_change_info": False,
-    "can_delete_messages": True,
-    "can_invite_users": True,
-    "can_restrict_members": True,
-    "can_pin_messages": True,
-    "can_manage_video_chats": True,
-    "can_promote_members": False,
-    "can_manage_topics": False,
-    "can_post_stories": False,
+# Aapke bataye gaye Default Settings
+EXACT_DEFAULTS = {
+    "can_change_info": False,         # Change info: OFF
+    "can_delete_messages": True,      # Dlt massage: ON
+    "can_restrict_members": False,    # Ban: OFF
+    "can_invite_users": False,        # Add Users: OFF
+    "can_pin_messages": True,         # Pin Messages: ON
+    "can_manage_video_chats": True,   # Manage Live Streams: ON
+    "can_promote_members": False,     # Add New Admins: OFF
+    "is_anonymous": False,            # Remain Anonymous: OFF
+    "can_post_stories": False,        # Manage Stories: OFF
     "can_edit_stories": False,
     "can_delete_stories": False,
 }
 
-async def get_admin_privileges(client: Client, user_id: int, chat_id: int):
+async def check_bot_admin_rights(client: Client, chat_id: int):
+    """Check karta hai ki Bot khud admin hai ya nahi"""
     try:
-        m = await client.get_chat_member(chat_id, user_id)
-        if m.status == ChatMemberStatus.OWNER:
-            return True, "owner"
-        if m.status == ChatMemberStatus.ADMINISTRATOR:
-            return True, m.privileges
-        return False, None
+        me = await client.get_chat_member(chat_id, "me")
+        if me.status == ChatMemberStatus.ADMINISTRATOR:
+            if me.privileges and me.privileges.can_promote_members:
+                return True, "ok"
+            return False, "rights"
+        elif me.status == ChatMemberStatus.OWNER:
+            return True, "ok"
+        return False, "not_admin"
     except Exception:
-        return False, None
+        return False, "not_admin"
+
+async def check_sender_admin(client: Client, message: Message):
+    if message.sender_chat and message.sender_chat.id == message.chat.id:
+        return True
+    if not message.from_user:
+        return False
+    try:
+        m = await client.get_chat_member(message.chat.id, message.from_user.id)
+        if m.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
+            if m.status == ChatMemberStatus.OWNER or (m.privileges and m.privileges.can_promote_members):
+                return True
+    except Exception:
+        pass
+    return False
 
 async def extract_target_user(client: Client, message: Message):
     if message.reply_to_message:
@@ -101,107 +97,145 @@ async def extract_target_user(client: Client, message: Message):
             return None
     return None
 
-def build_promote_panel(chat_id: int, target_id: int, page: int = 1):
+def get_user_mention(user):
+    if hasattr(user, "first_name"):
+        name = html.escape(user.first_name or "User")
+        return f"<a href='tg://user?id={user.id}'>{name}</a>"
+    if hasattr(user, "title"):
+        return f"<b>{html.escape(user.title)}</b>"
+    return "User"
+
+def build_simple_panel(chat_id: int, target_id: int, expanded: bool = False):
     session_key = (chat_id, target_id)
-    rights = PROMOTE_SESSIONS.get(session_key, {}).get("rights", DEFAULT_RIGHTS.copy())
-    
+    session = PROMOTE_SESSIONS.get(session_key, {})
+    rights = session.get("rights", EXACT_DEFAULTS.copy())
+
     keyboard = []
-    page_rights = RIGHTS_CONFIG.get(page, [])
 
-    row = []
-    for perm_key, label in page_rights:
-        is_on = rights.get(perm_key, False)
-        # Duke style indicator: Selected rights highlighted without heavy emojis
-        status_symbol = "✓ " if is_on else "✗ "
-        btn_text = status_symbol + to_duke_font(label)
-        cb_data = f"prt_{target_id}_{page}_{perm_key[:12]}"
-        row.append(InlineKeyboardButton(btn_text, callback_data=cb_data))
-        if len(row) == 2:
+    if expanded:
+        # Jab admin ne 'Change Permissions' choose kiya
+        row = []
+        for perm_key, label in PERMISSIONS_MAP:
+            is_on = rights.get(perm_key, False)
+            icon = "🟢" if is_on else "🔴"
+            row.append(InlineKeyboardButton(f"{icon} {label}", callback_data=f"tgl_{target_id}_{perm_key[:10]}"))
+            if len(row) == 2:
+                keyboard.append(row)
+                row = []
+        if row:
             keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
 
-    # Navigation Row (Duke Gothic font)
-    nav_row = []
-    if page > 1:
-        nav_row.append(InlineKeyboardButton(to_duke_font("Previous"), callback_data=f"prp_{target_id}_{page - 1}"))
-    if page < 3:
-        nav_row.append(InlineKeyboardButton(to_duke_font("Next"), callback_data=f"prp_{target_id}_{page + 1}"))
-    if nav_row:
-        keyboard.append(nav_row)
-
-    # Confirm Row
-    keyboard.append([
-        InlineKeyboardButton(to_duke_font("Confirm"), callback_data=f"prc_{target_id}")
-    ])
+        keyboard.append([
+            InlineKeyboardButton("✅ Confirm & Promote", callback_data=f"pconf_{target_id}"),
+            InlineKeyboardButton("❌ Cancel", callback_data=f"pcanc_{target_id}")
+        ])
+    else:
+        # Shuru me sirf 2 main buttons
+        keyboard.append([
+            InlineKeyboardButton("⚙️ Change Permissions", callback_data=f"pexp_{target_id}"),
+            InlineKeyboardButton("✅ Confirm", callback_data=f"pconf_{target_id}")
+        ])
+        keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data=f"pcanc_{target_id}")])
 
     return InlineKeyboardMarkup(keyboard)
 
 # ==================== PROMOTE TRIGGER ====================
 @Client.on_message(filters.command(["promote"], prefixes=[".", "/"]) & filters.group)
 async def promote_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-
-    if privs != "owner" and not (privs and privs.can_promote_members):
+    # 1. BOT ADMIN CHECK (Glitch Fix)
+    bot_ok, reason = await check_bot_admin_rights(client, message.chat.id)
+    if not bot_ok:
+        if reason == "rights":
+            return await message.reply_text(
+                "<blockquote>⚠️ <b>Give me admin with 'Add New Admins' right to do this!</b></blockquote>",
+                parse_mode=ParseMode.HTML
+            )
         return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b></blockquote>",
-            parse_mode=ParseMode.HTML,
+            "<blockquote>⚠️ <b>Give me admin to do this!</b></blockquote>",
+            parse_mode=ParseMode.HTML
         )
 
+    # 2. SENDER ADMIN CHECK
+    is_admin = await check_sender_admin(client, message)
+    if not is_admin:
+        return await message.reply_text(
+            "<blockquote>❌ <b>Permission Denied!</b>\nSirf Admins hi kisi ko promote kar sakte hain.</blockquote>",
+            parse_mode=ParseMode.HTML
+        )
+
+    # 3. TARGET USER CHECK
     target = await extract_target_user(client, message)
     if not target:
-        header_text = to_duke_font("Usage reply or /promote @user Title. Example /promote @user Moderator.")
         return await message.reply_text(
-            f"<blockquote>❔ {header_text}</blockquote>",
-            parse_mode=ParseMode.HTML,
+            "<blockquote>❓ <b>Usage:</b> Reply to user or <code>.promote @username [title]</code></blockquote>",
+            parse_mode=ParseMode.HTML
         )
 
     bot = await client.get_me()
     if target.id == bot.id:
-        return await message.reply_text("<blockquote>🥺 Main pehle se bot admin hoon!</blockquote>", parse_mode=ParseMode.HTML)
+        return await message.reply_text("<blockquote>🥺 Main pehle se is group me hoon!</blockquote>", parse_mode=ParseMode.HTML)
 
     parts = message.text.split(maxsplit=2)
     custom_title = "Admin"
-    if message.reply_to_message:
-        if len(parts) > 1:
-            custom_title = message.text.split(maxsplit=1)[1]
-    else:
-        if len(parts) > 2:
-            custom_title = parts[2]
+    if message.reply_to_message and len(parts) > 1:
+        custom_title = message.text.split(maxsplit=1)[1]
+    elif not message.reply_to_message and len(parts) > 2:
+        custom_title = parts[2]
 
+    sender_id = message.from_user.id if message.from_user else message.chat.id
+    target_name = getattr(target, "first_name", getattr(target, "title", "User"))
     session_key = (message.chat.id, target.id)
-    t_name = getattr(target, "first_name", "User")
+
     PROMOTE_SESSIONS[session_key] = {
-        "admin_id": message.from_user.id,
-        "rights": DEFAULT_RIGHTS.copy(),
+        "admin_id": sender_id,
+        "rights": EXACT_DEFAULTS.copy(),
         "title": custom_title[:16],
-        "target_name": t_name
+        "target_name": target_name,
+        "expanded": False
     }
 
-    panel_markup = build_promote_panel(message.chat.id, target.id, page=1)
-    
-    title_text = to_duke_font("Select Admin Rights for")
-    page_text = to_duke_font("Page 1/3")
+    markup = build_simple_panel(message.chat.id, target.id, expanded=False)
+    target_mention = get_user_mention(target)
 
     await message.reply_text(
-        f"<blockquote><b>{title_text} {html.escape(t_name)}</b>\n"
-        f"<b>{page_text}</b></blockquote>",
-        reply_markup=panel_markup,
-        parse_mode=ParseMode.HTML,
+        f"<blockquote>⚡ <b>Promote Admin:</b> {target_mention}\n"
+        f"🏷️ <b>Title:</b> <code>{html.escape(custom_title[:16])}</code>\n\n"
+        f"<i>Confirm dabayein default permissions ke sath promote karne ke liye, ya Permissions badle!</i></blockquote>",
+        reply_markup=markup,
+        parse_mode=ParseMode.HTML
     )
 
-# ==================== TOGGLE BUTTONS ====================
-@Client.on_callback_query(filters.regex(r"^prt_(\d+)_(\d+)_(.+)$"))
+# ==================== CHANGE PERMISSIONS BUTTON ====================
+@Client.on_callback_query(filters.regex(r"^pexp_(\d+)$"))
+async def promote_expand_callback(client: Client, query: CallbackQuery):
+    target_id = int(query.matches[0].group(1))
+    chat_id = query.message.chat.id
+    session_key = (chat_id, target_id)
+
+    session = PROMOTE_SESSIONS.get(session_key)
+    if not session:
+        return await query.answer("⚠️ Session expired! Dubara .promote likhein.", show_alert=True)
+
+    if query.from_user.id != session["admin_id"]:
+        return await query.answer("❌ Sirf command dene wala admin hi options badal sakta hai!", show_alert=True)
+
+    session["expanded"] = True
+    markup = build_simple_panel(chat_id, target_id, expanded=True)
+    t_name = html.escape(session["target_name"])
+
+    await query.message.edit_text(
+        f"<blockquote>⚙️ <b>Custom Rights for {t_name}</b>\n\n"
+        f"<i>Permissions select karein aur Confirm dabayein:</i></blockquote>",
+        reply_markup=markup,
+        parse_mode=ParseMode.HTML
+    )
+    await query.answer()
+
+# ==================== TOGGLE PERMISSION BUTTONS ====================
+@Client.on_callback_query(filters.regex(r"^tgl_(\d+)_(.+)$"))
 async def promote_toggle_callback(client: Client, query: CallbackQuery):
     target_id = int(query.matches[0].group(1))
-    page = int(query.matches[0].group(2))
-    short_perm = query.matches[0].group(3)
+    short_key = query.matches[0].group(2)
     chat_id = query.message.chat.id
     session_key = (chat_id, target_id)
 
@@ -210,58 +244,23 @@ async def promote_toggle_callback(client: Client, query: CallbackQuery):
         return await query.answer("⚠️ Session expired!", show_alert=True)
 
     if query.from_user.id != session["admin_id"]:
-        return await query.answer("❌ Sirf command dene wala admin hi buttons toggle kar sakta hai!", show_alert=True)
+        return await query.answer("❌ Sirf command dene wala admin hi permissions switch kar sakta hai!", show_alert=True)
 
     for k in session["rights"].keys():
-        if k.startswith(short_perm):
+        if k.startswith(short_key):
             session["rights"][k] = not session["rights"][k]
+            # Agar stories on/off hui toh edit aur delete bhi sync karein
+            if "stories" in k:
+                session["rights"]["can_edit_stories"] = session["rights"][k]
+                session["rights"]["can_delete_stories"] = session["rights"][k]
             break
 
-    t_name = session.get("target_name", "User")
-    panel_markup = build_promote_panel(chat_id, target_id, page=page)
-    
-    title_text = to_duke_font("Select Admin Rights for")
-    page_text = to_duke_font(f"Page {page}/3")
-
-    await query.message.edit_text(
-        f"<blockquote><b>{title_text} {html.escape(t_name)}</b>\n"
-        f"<b>{page_text}</b></blockquote>",
-        reply_markup=panel_markup,
-        parse_mode=ParseMode.HTML,
-    )
+    markup = build_simple_panel(chat_id, target_id, expanded=True)
+    await query.message.edit_reply_markup(reply_markup=markup)
     await query.answer()
 
-# ==================== PAGE NAVIGATION ====================
-@Client.on_callback_query(filters.regex(r"^prp_(\d+)_(\d+)$"))
-async def promote_page_callback(client: Client, query: CallbackQuery):
-    target_id = int(query.matches[0].group(1))
-    new_page = int(query.matches[0].group(2))
-    chat_id = query.message.chat.id
-    session_key = (chat_id, target_id)
-
-    session = PROMOTE_SESSIONS.get(session_key)
-    if not session:
-        return await query.answer("⚠️ Session expired!", show_alert=True)
-
-    if query.from_user.id != session["admin_id"]:
-        return await query.answer("❌ Sirf command dene wala admin hi page badal sakta hai!", show_alert=True)
-
-    t_name = session.get("target_name", "User")
-    panel_markup = build_promote_panel(chat_id, target_id, page=new_page)
-    
-    title_text = to_duke_font("Select Admin Rights for")
-    page_text = to_duke_font(f"Page {new_page}/3")
-
-    await query.message.edit_text(
-        f"<blockquote><b>{title_text} {html.escape(t_name)}</b>\n"
-        f"<b>{page_text}</b></blockquote>",
-        reply_markup=panel_markup,
-        parse_mode=ParseMode.HTML,
-    )
-    await query.answer()
-
-# ==================== CONFIRM ====================
-@Client.on_callback_query(filters.regex(r"^prc_(\d+)$"))
+# ==================== CONFIRM BUTTON ====================
+@Client.on_callback_query(filters.regex(r"^pconf_(\d+)$"))
 async def promote_confirm_callback(client: Client, query: CallbackQuery):
     target_id = int(query.matches[0].group(1))
     chat_id = query.message.chat.id
@@ -269,71 +268,92 @@ async def promote_confirm_callback(client: Client, query: CallbackQuery):
 
     session = PROMOTE_SESSIONS.get(session_key)
     if not session:
-        return await query.answer("⚠️ Session expired!", show_alert=True)
+        return await query.answer("⚠️ Session expired! Please re-run .promote", show_alert=True)
 
     if query.from_user.id != session["admin_id"]:
         return await query.answer("❌ Sirf command dene wala admin hi Confirm kar sakta hai!", show_alert=True)
 
+    # Re-check bot rights
+    bot_ok, _ = await check_bot_admin_rights(client, chat_id)
+    if not bot_ok:
+        return await query.answer("❌ Give me admin to do this!", show_alert=True)
+
     r = session["rights"]
     custom_title = session.get("title", "Admin")
 
+    # Safe privileges object according to Pyrogram
     privs = ChatPrivileges(
         can_manage_chat=True,
         can_change_info=r.get("can_change_info", False),
-        can_delete_messages=r.get("can_delete_messages", False),
+        can_delete_messages=r.get("can_delete_messages", True),
         can_invite_users=r.get("can_invite_users", False),
         can_restrict_members=r.get("can_restrict_members", False),
-        can_pin_messages=r.get("can_pin_messages", False),
-        can_manage_video_chats=r.get("can_manage_video_chats", False),
+        can_pin_messages=r.get("can_pin_messages", True),
+        can_manage_video_chats=r.get("can_manage_video_chats", True),
         can_promote_members=r.get("can_promote_members", False),
+        is_anonymous=r.get("is_anonymous", False),
     )
 
     try:
         await client.promote_chat_member(chat_id, target_id, privs)
-    except RPCError as tg_err:
-        return await query.answer(f"❌ Telegram Error:\n{tg_err.MESSAGE}", show_alert=True)
-    except Exception as general_err:
-        return await query.answer(f"❌ Error: {str(general_err)}", show_alert=True)
+    except RPCError as e:
+        return await query.answer(f"Telegram Error:\n{e.MESSAGE}", show_alert=True)
+    except Exception as e:
+        return await query.answer(f"Error: {e}", show_alert=True)
 
     try:
+        # Edit Member Tags / Title set karna
         await client.set_administrator_title(chat_id, target_id, custom_title[:16])
     except Exception:
         pass
 
-    target_name = html.escape(session.get("target_name", "User"))
+    target_name = html.escape(session["target_name"])
+    admin_name = html.escape(query.from_user.first_name)
     PROMOTE_SESSIONS.pop(session_key, None)
 
     await query.message.edit_text(
-        f"<blockquote>👑 <b>{to_duke_font('Promoted Successfully')}</b>\n"
+        f"<blockquote>🎖️ <b>Promoted Successfully!</b>\n"
         f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
         f"👤 <b>Admin:</b> <a href='tg://user?id={target_id}'>{target_name}</a>\n"
-        f"🏷️ <b>Title:</b> <code>{html.escape(custom_title)}</code></blockquote>",
-        parse_mode=ParseMode.HTML,
+        f"🏷️ <b>Title:</b> <code>{html.escape(custom_title)}</code>\n"
+        f"👮‍♂️ <b>Promoted By:</b> <a href='tg://user?id={query.from_user.id}'>{admin_name}</a>\n"
+        f"✨ <i>Permissions successfully applied!</i></blockquote>",
+        parse_mode=ParseMode.HTML
     )
-    await query.answer("✅ Promoted!")
+    await query.answer("✅ Successfully Promoted!")
+
+# ==================== CANCEL BUTTON ====================
+@Client.on_callback_query(filters.regex(r"^pcanc_(\d+)$"))
+async def promote_cancel_callback(client: Client, query: CallbackQuery):
+    target_id = int(query.matches[0].group(1))
+    chat_id = query.message.chat.id
+    session_key = (chat_id, target_id)
+
+    session = PROMOTE_SESSIONS.get(session_key)
+    if session and query.from_user.id != session["admin_id"]:
+        return await query.answer("❌ Sirf command dene wala admin hi cancel kar sakta hai!", show_alert=True)
+
+    PROMOTE_SESSIONS.pop(session_key, None)
+    await query.message.edit_text("<blockquote>❌ <b>Promotion Cancelled!</b></blockquote>", parse_mode=ParseMode.HTML)
+    await query.answer("Cancelled")
 
 # ==================== DEMOTE (DIRECT REVOKE) ====================
 @Client.on_message(filters.command(["demote"], prefixes=[".", "/"]) & filters.group)
 async def demote_direct_command(client: Client, message: Message):
-    if not message.from_user:
-        return
-
-    is_adm, privs = await get_admin_privileges(client, message.from_user.id, message.chat.id)
-    if not is_adm:
-        return
-
-    if privs != "owner" and not (privs and privs.can_promote_members):
+    bot_ok, _ = await check_bot_admin_rights(client, message.chat.id)
+    if not bot_ok:
         return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b></blockquote>",
-            parse_mode=ParseMode.HTML,
+            "<blockquote>⚠️ <b>Give me admin to do this!</b></blockquote>",
+            parse_mode=ParseMode.HTML
         )
+
+    is_admin = await check_sender_admin(client, message)
+    if not is_admin:
+        return await message.reply_text("<blockquote>❌ Sirf Admins hi demote kar sakte hain!</blockquote>", parse_mode=ParseMode.HTML)
 
     target = await extract_target_user(client, message)
     if not target:
-        return await message.reply_text(
-            "<blockquote>⚠️ <b>Format:</b> <code>.demote @username</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        return await message.reply_text("<blockquote>⚠️ <b>Format:</b> <code>.demote @username</code> ya message par reply karein.</blockquote>", parse_mode=ParseMode.HTML)
 
     bot = await client.get_me()
     if target.id == bot.id:
@@ -351,18 +371,17 @@ async def demote_direct_command(client: Client, message: Message):
             can_pin_messages=False,
         )
         await client.promote_chat_member(message.chat.id, target.id, no_rights)
-        target_name = html.escape(getattr(target, "first_name", "User"))
+        target_name = html.escape(getattr(target, "first_name", getattr(target, "title", "User")))
+        admin_name = html.escape(message.from_user.first_name if message.from_user else "Admin")
 
         await message.reply_text(
-            f"<blockquote>🔻 <b>{to_duke_font('Demoted')}</b>\n"
+            f"<blockquote>🔻 <b>Demoted!</b>\n"
             f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
             f"👤 <b>User:</b> <a href='tg://user?id={target.id}'>{target_name}</a>\n"
-            f"✨ <i>All admin rights revoked!</i></blockquote>",
-            parse_mode=ParseMode.HTML,
+            f"👮‍♂️ <b>Demoted By:</b> {admin_name}\n"
+            f"✨ <i>All admin privileges revoked!</i></blockquote>",
+            parse_mode=ParseMode.HTML
         )
     except Exception as e:
-        await message.reply_text(
-            f"<blockquote>⚠️ <b>Failed to demote:</b> <code>{html.escape(str(e))}</code></blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        await message.reply_text(f"<blockquote>⚠️ <b>Failed to demote:</b> <code>{html.escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
         
