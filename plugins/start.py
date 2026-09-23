@@ -355,8 +355,9 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
             "• <code>.dart</code> - Dart board shoot 🎯\n"
             "• <code>.basket</code> - Basketball shoot 🏀\n"
             "• <code>.football</code> - Football penalty kick ⚽\n"
-            "• <code>.slot</code> - Casino 777 jackpot spin 🎰"
-        ),
+            "• <code>.slot</code> - Casino 777 jackpot spin 🎰\n"
+            "• <code>.wordsearch</code> ya <code>.words</code> - Word search puzzle game 🧩"
+         ),
         "extra": (
             "✨ <b>Extra & Stickers:</b>\n"
             "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
