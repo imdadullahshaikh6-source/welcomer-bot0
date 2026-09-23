@@ -9,20 +9,26 @@ from pyrogram.types import (
     InlineKeyboardButton,
 )
 
-async def is_admin_or_owner(client: Client, chat_id: int, user_id: int):
-    try:
-        member = await client.get_chat_member(chat_id, user_id)
-        if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
-            # Owner ke paas full right hota hai, admin ke privileges check karo
-            if member.status == ChatMemberStatus.OWNER:
-                return True
-            if member.privileges and member.privileges.can_restrict_members:
-                return True
-        return False
-    except Exception:
-        return False
+async def check_admin_rights(client: Client, message: Message):
+    # Agar user anonymous admin hai (channel ke roop me bhej raha hai)
+    if message.sender_chat and message.sender_chat.id == message.chat.id:
+        return True, True
 
-async def extract_target_user(client: Client, message: Message):
+    if not message.from_user:
+        return False, False
+
+    try:
+        member = await client.get_chat_member(message.chat.id, message.from_user.id)
+        if member.status == ChatMemberStatus.OWNER:
+            return True, True
+        if member.status == ChatMemberStatus.ADMINISTRATOR:
+            can_restrict = bool(member.privileges and member.privileges.can_restrict_members)
+            return True, can_restrict
+    except Exception:
+        pass
+    return False, False
+
+async def extract_target(client: Client, message: Message):
     if message.reply_to_message:
         if message.reply_to_message.from_user:
             return message.reply_to_message.from_user
@@ -61,21 +67,20 @@ def get_user_mention(user):
 # ==================== MUTE ====================
 @Client.on_message(filters.command(["mute", "dmute"], prefixes=[".", "/"]) & filters.group)
 async def mute_command(client: Client, message: Message):
-    if not message.from_user:
+    is_adm, can_restrict = await check_admin_rights(client, message)
+    if not is_adm:
         return
 
-    # Check Admin Right
-    can_mute = await is_admin_or_owner(client, message.chat.id, message.from_user.id)
-    if not can_mute:
+    if not can_restrict:
         return await message.reply_text(
             "<blockquote>❌ <b>Permission Denied!</b>\nAapke paas members ko mute/restrict karne ka right nahi hai!</blockquote>",
             parse_mode=ParseMode.HTML,
         )
 
-    target = await extract_target_user(client, message)
+    target = await extract_target(client, message)
     if not target:
         return await message.reply_text(
-            "<blockquote>⚠️ <b>Kisi user/bot ke message par reply karein ya tag karein:</b>\n<code>.mute @username</code></blockquote>",
+            "<blockquote>⚠️ <b>Kisi user ke message par reply karke ya tag karke command dein:</b>\n<code>.mute @username</code></blockquote>",
             parse_mode=ParseMode.HTML,
         )
 
@@ -83,7 +88,7 @@ async def mute_command(client: Client, message: Message):
     if target.id == bot.id:
         return await message.reply_text("<blockquote>🥺 Main khud ko mute nahi kar sakti!</blockquote>", parse_mode=ParseMode.HTML)
 
-    # Admin check on target
+    # Check if target is admin
     try:
         t_member = await client.get_chat_member(message.chat.id, target.id)
         if t_member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
@@ -92,7 +97,6 @@ async def mute_command(client: Client, message: Message):
         pass
 
     try:
-        # User message permissions band karna
         await client.restrict_chat_member(
             chat_id=message.chat.id,
             user_id=target.id,
@@ -118,24 +122,18 @@ async def mute_command(client: Client, message: Message):
         )
     except Exception as e:
         await message.reply_text(
-            f"<blockquote>⚠️ <b>Failed to mute:</b> <code>{html.escape(str(e))}</code></blockquote>",
+            f"<blockquote>⚠️ <b>Failed to mute:</b> <code>{html.escape(str(e))}</code>\n\n<i>Kripya check karein ki Bot ke paas group me 'Ban Users' ka right hai ya nahi!</i></blockquote>",
             parse_mode=ParseMode.HTML,
         )
 
-# ==================== UNMUTE (COMMAND) ====================
+# ==================== UNMUTE ====================
 @Client.on_message(filters.command(["unmute"], prefixes=[".", "/"]) & filters.group)
 async def unmute_command(client: Client, message: Message):
-    if not message.from_user:
+    is_adm, can_restrict = await check_admin_rights(client, message)
+    if not is_adm or not can_restrict:
         return
 
-    can_unmute = await is_admin_or_owner(client, message.chat.id, message.from_user.id)
-    if not can_unmute:
-        return await message.reply_text(
-            "<blockquote>❌ <b>Permission Denied!</b>\nAapke paas members ko unmute karne ka right nahi hai!</blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
-
-    target = await extract_target_user(client, message)
+    target = await extract_target(client, message)
     if not target:
         return await message.reply_text(
             "<blockquote>⚠️ <b>User par reply karein ya tag karein:</b>\n<code>.unmute @username</code></blockquote>",
@@ -169,15 +167,18 @@ async def unmute_command(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
 
-# ==================== UNMUTE (BUTTON CALLBACK) ====================
+# ==================== UNMUTE BUTTON CALLBACK ====================
 @Client.on_callback_query(filters.regex(r"^adm_unmute_(\d+)$"))
 async def unmute_button_callback(client: Client, query: CallbackQuery):
     target_id = int(query.data.split("_")[2])
     chat_id = query.message.chat.id
 
-    can_unmute = await is_admin_or_owner(client, chat_id, query.from_user.id)
-    if not can_unmute:
-        return await query.answer("❌ Sirf Admins hi yeh button use kar sakte hain!", show_alert=True)
+    try:
+        member = await client.get_chat_member(chat_id, query.from_user.id)
+        if member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR]:
+            return await query.answer("❌ Sirf Admins hi yeh button use kar sakte hain!", show_alert=True)
+    except Exception:
+        return await query.answer("❌ Error checking admin rights!", show_alert=True)
 
     try:
         chat = await client.get_chat(chat_id)
