@@ -2,7 +2,12 @@ import os
 import html
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode, ChatMemberStatus, MessageEntityType
-from pyrogram.types import Message
+from pyrogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # MongoDB Connection
@@ -130,6 +135,9 @@ async def ban_command(client: Client, message: Message):
             except Exception:
                 pass
 
+        # Inline Button for Unban
+        btn = InlineKeyboardMarkup([[InlineKeyboardButton("🔓 Unban Member", callback_data=f"adm_unban_{target.id}")]])
+
         await message.reply_text(
             f"<blockquote>🚫 <b>Banned User!</b>\n"
             f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
@@ -137,6 +145,7 @@ async def ban_command(client: Client, message: Message):
             f"👮‍♂️ <b>Admin:</b> {admin_mention}\n"
             f"📝 <b>Reason:</b> <i>{html.escape(reason)}</i>\n"
             f"💾 <i>Saved to Database</i></blockquote>",
+            reply_markup=btn,
             parse_mode=ParseMode.HTML
         )
     except Exception as e:
@@ -144,6 +153,36 @@ async def ban_command(client: Client, message: Message):
             f"<blockquote>⚠️ <b>Failed to ban:</b> <code>{html.escape(str(e))}</code></blockquote>",
             parse_mode=ParseMode.HTML
         )
+
+# ==================== UNBAN (BUTTON CALLBACK) ====================
+@Client.on_callback_query(filters.regex(r"^adm_unban_(\d+)$"))
+async def unban_button_callback(client: Client, query: CallbackQuery):
+    target_id = int(query.data.split("_")[2])
+    chat_id = query.message.chat.id
+
+    is_adm, privs = await get_admin_privileges(client, query.from_user.id, chat_id)
+    if not is_adm:
+        return await query.answer("❌ Sirf Admins hi yeh button use kar sakte hain!", show_alert=True)
+
+    if privs != "owner" and not (privs and privs.can_restrict_members):
+        return await query.answer("❌ Aapke paas Ban Users right nahi hai!", show_alert=True)
+
+    try:
+        await client.unban_chat_member(chat_id, target_id)
+        await remove_ban_from_db(chat_id, target_id)
+        await query.answer("🔓 Member successfully unbanned!")
+
+        admin_name = html.escape(query.from_user.first_name)
+        await query.message.edit_text(
+            f"<blockquote>✅ <b>Unbanned!</b>\n"
+            f"✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
+            f"👤 <b>Target ID:</b> <code>{target_id}</code>\n"
+            f"✨ <i>Unbanned by <a href='tg://user?id={query.from_user.id}'>{admin_name}</a>!</i>\n"
+            f"💾 <i>Removed from Database</i></blockquote>",
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        await query.answer(f"Error: {e}", show_alert=True)
 
 # ==================== KICK ====================
 @Client.on_message(filters.command(["kick", "dkick"], prefixes=[".", "/"]) & filters.group)
@@ -210,7 +249,7 @@ async def kick_command(client: Client, message: Message):
             parse_mode=ParseMode.HTML
         )
 
-# ==================== UNBAN ====================
+# ==================== UNBAN (COMMAND) ====================
 @Client.on_message(filters.command(["unban"], prefixes=[".", "/"]) & filters.group)
 async def unban_command(client: Client, message: Message):
     if not message.from_user:
