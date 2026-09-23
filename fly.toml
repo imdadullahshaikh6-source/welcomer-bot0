@@ -1,8 +1,0 @@
-app = "zoya"
-primary_region = "ams"
-
-[build]
-
-[experimental]
-  auto_stop_machines = false
-  
