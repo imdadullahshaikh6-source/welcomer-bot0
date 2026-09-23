@@ -8,10 +8,13 @@ from pyrogram.types import Message, CallbackQuery
 OWNER_USERNAME = "Ownerbackk"
 SUPPORT_GROUP_URL = "https://t.me/+UCmLt1cgPhI1MjFl"
 
+# Nayi Aesthetic Zoya Banner Photo
+START_PHOTO_URL = "https://graph.org/file/d3a2c17942e606f4ec811-9c0373fa8bb10f4448.jpg"
+
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Bot API HTTP Caller jo Button Colors (style) ko preserve rakhta hai
+# Bot API HTTP Caller jo Button Colors (style) aur Full-Screen Big Reactions handle karta hai
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -83,7 +86,7 @@ FORMATTING_GUIDE_TEXT = (
     "• Tag karke: <code>.ban @username</code> ya <code>.ban Noor</code></blockquote>"
 )
 
-# First Page Layout
+# First Page Layout (Green Stylish Buttons)
 def get_start_markup(bot_username: str):
     owner_url = f"https://t.me/{OWNER_USERNAME}"
     add_bot_url = f"https://t.me/{bot_username}?startgroup=true"
@@ -139,13 +142,15 @@ def get_commands_menu():
 
 @Client.on_message(filters.command("start", prefixes=["/", "."]))
 async def start_handler(client: Client, message: Message):
+    # 1. User ke /start par Heart big animation reaction
     try:
-        reaction_payload = {
+        user_reaction_payload = {
             "chat_id": message.chat.id,
             "message_id": message.id,
-            "reaction": [{"type": "emoji", "emoji": "🔥"}]
+            "reaction": [{"type": "emoji", "emoji": "❤️"}],
+            "is_big": True
         }
-        await call_tg_bot_api("setMessageReaction", reaction_payload)
+        await call_tg_bot_api("setMessageReaction", user_reaction_payload)
     except Exception:
         pass
 
@@ -153,7 +158,7 @@ async def start_handler(client: Client, message: Message):
     first_name = message.from_user.first_name or "Friend"
     mention = f"<a href='tg://user?id={message.from_user.id}'>{first_name}</a>"
 
-    # Agar start argument 'help' hai toh direct commands menu dikhayein
+    # Agar start argument 'help' ho
     if len(message.command) > 1 and message.command[1].lower() == "help":
         payload = {
             "chat_id": message.chat.id,
@@ -161,20 +166,55 @@ async def start_handler(client: Client, message: Message):
             "parse_mode": "HTML",
             "reply_markup": get_commands_menu()
         }
-        return await call_tg_bot_api("sendMessage", payload)
+        resp = await call_tg_bot_api("sendMessage", payload)
+        if resp and resp.get("ok"):
+            bot_msg_id = resp["result"]["message_id"]
+            await call_tg_bot_api("setMessageReaction", {
+                "chat_id": message.chat.id,
+                "message_id": bot_msg_id,
+                "reaction": [{"type": "emoji", "emoji": "🔥"}],
+                "is_big": True
+            })
+        return
 
     if message.chat.type.name == "PRIVATE":
         caption = DM_START_TEXT.format(mention=mention)
         markup = get_start_markup(bot.username)
         
+        # Photo ke sath bhejna (Banner ke sath)
         payload = {
             "chat_id": message.chat.id,
-            "text": caption,
+            "photo": START_PHOTO_URL,
+            "caption": caption,
             "parse_mode": "HTML",
-            "disable_web_page_preview": True,
             "reply_markup": markup
         }
-        await call_tg_bot_api("sendMessage", payload)
+        resp = await call_tg_bot_api("sendPhoto", payload)
+        
+        # Fallback agar photo send na ho sake
+        if not resp or not resp.get("ok"):
+            payload = {
+                "chat_id": message.chat.id,
+                "text": caption,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+                "reply_markup": markup
+            }
+            resp = await call_tg_bot_api("sendMessage", payload)
+
+        # 2. Bot ke apne photo message par big flame blast reaction
+        if resp and resp.get("ok"):
+            bot_msg_id = resp["result"]["message_id"]
+            try:
+                bot_reaction_payload = {
+                    "chat_id": message.chat.id,
+                    "message_id": bot_msg_id,
+                    "reaction": [{"type": "emoji", "emoji": "🔥"}],
+                    "is_big": True
+                }
+                await call_tg_bot_api("setMessageReaction", bot_reaction_payload)
+            except Exception:
+                pass
     else:
         caption = GROUP_START_TEXT.format(mention=mention)
         markup = get_group_markup(bot.username)
@@ -189,7 +229,7 @@ async def start_handler(client: Client, message: Message):
         }
         await call_tg_bot_api("sendMessage", payload)
 
-# /help Command Handler (Direct Commands Open Karega)
+# /help Command Handler (DM me direct commands khulega)
 @Client.on_message(filters.command("help", prefixes=["/", "."]))
 async def help_handler(client: Client, message: Message):
     bot = await client.get_me()
@@ -203,7 +243,15 @@ async def help_handler(client: Client, message: Message):
             "parse_mode": "HTML",
             "reply_markup": get_commands_menu()
         }
-        await call_tg_bot_api("sendMessage", payload)
+        resp = await call_tg_bot_api("sendMessage", payload)
+        if resp and resp.get("ok"):
+            bot_msg_id = resp["result"]["message_id"]
+            await call_tg_bot_api("setMessageReaction", {
+                "chat_id": message.chat.id,
+                "message_id": bot_msg_id,
+                "reaction": [{"type": "emoji", "emoji": "🔥"}],
+                "is_big": True
+            })
     else:
         caption = GROUP_START_TEXT.format(mention=mention)
         markup = get_group_markup(bot.username)
@@ -219,14 +267,13 @@ async def help_handler(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex("^open_commands$"))
 async def commands_callback(client: Client, query: CallbackQuery):
-    payload = {
+    await call_tg_bot_api("editMessageCaption" if query.message.photo else "editMessageText", {
         "chat_id": query.message.chat.id,
         "message_id": query.message.id,
-        "text": HELP_TEXT,
+        "caption" if query.message.photo else "text": HELP_TEXT,
         "parse_mode": "HTML",
         "reply_markup": get_commands_menu()
-    }
-    await call_tg_bot_api("editMessageText", payload)
+    })
     await query.answer()
 
 @Client.on_callback_query(filters.regex("^open_formatting$"))
@@ -236,15 +283,13 @@ async def formatting_callback(client: Client, query: CallbackQuery):
             [{"text": "« Back To Modules", "callback_data": "open_commands", "style": "success"}]
         ]
     }
-    payload = {
+    await call_tg_bot_api("editMessageCaption" if query.message.photo else "editMessageText", {
         "chat_id": query.message.chat.id,
         "message_id": query.message.id,
-        "text": FORMATTING_GUIDE_TEXT,
+        "caption" if query.message.photo else "text": FORMATTING_GUIDE_TEXT,
         "parse_mode": "HTML",
-        "disable_web_page_preview": True,
         "reply_markup": back_btn
-    }
-    await call_tg_bot_api("editMessageText", payload)
+    })
     await query.answer()
 
 @Client.on_callback_query(filters.regex("^back_to_start$"))
@@ -254,15 +299,13 @@ async def back_start_callback(client: Client, query: CallbackQuery):
     mention = f"<a href='tg://user?id={query.from_user.id}'>{first_name}</a>"
     caption = DM_START_TEXT.format(mention=mention)
     
-    payload = {
+    await call_tg_bot_api("editMessageCaption" if query.message.photo else "editMessageText", {
         "chat_id": query.message.chat.id,
         "message_id": query.message.id,
-        "text": caption,
+        "caption" if query.message.photo else "text": caption,
         "parse_mode": "HTML",
-        "disable_web_page_preview": True,
         "reply_markup": get_start_markup(bot.username)
-    }
-    await call_tg_bot_api("editMessageText", payload)
+    })
     await query.answer()
 
 @Client.on_callback_query(filters.regex(r"^cmd_(admin|pin|greet|extra|fun)$"))
@@ -326,13 +369,12 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
         ]
     }
     
-    payload = {
+    await call_tg_bot_api("editMessageCaption" if query.message.photo else "editMessageText", {
         "chat_id": query.message.chat.id,
         "message_id": query.message.id,
-        "text": text,
+        "caption" if query.message.photo else "text": text,
         "parse_mode": "HTML",
         "reply_markup": back_btn
-    }
-    await call_tg_bot_api("editMessageText", payload)
+    })
     await query.answer()
     
