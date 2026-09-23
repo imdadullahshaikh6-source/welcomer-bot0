@@ -10,20 +10,13 @@ OWNER_USERNAME = "Ownerbackk"
 SUPPORT_GROUP_URL = "https://t.me/+UCmLt1cgPhI1MjFl"
 START_PHOTO_URL = "https://graph.org/file/d3a2c17942e606f4ec811-9c0373fa8bb10f4448.jpg"
 
-# Har baar alag-alag cute animated sticker bhejne ke liye list
-ANIMATED_STICKERS = [
-    "CAACAgUAAxkBAAEL4kpmR7v5fPj7J78iI7b3m9X6gJ9bKgACFwIAAm-L-FU5AAGZ1_Y4T4weBA",
-    "CAACAgIAAxkBAAEK1e9lR6s1kEfZx784o6lB8L1s5j8qFAACegADrWW8FP_l2bN9O6cEHgQ",
-    "CAACAgIAAxkBAAEK1fFlR6s8Z9u3yE7-V4v0d5xO6j8rFAACfQADrWW8FFs7q2x6eN0AHgQ",
-    "CAACAgIAAxkBAAEK1fNlR6tEni5jZ5eN8u9i4xP3j1s0FAACfwADrWW8FFnF_4a2cE00HgQ",
-    "CAACAgUAAxkBAAEL4kxmR7v9u9V6p3i1o0f6AAGZ1_Y4T4weBA",
-    "CAACAgIAAxkBAAEK1fVlR6tLh9n6J3v0AAGZ1_Y4T4weBA"
-]
+# Telegram Animated Emojis (Single emoji text is natively rendered as animated large emoji)
+ANIMATED_EMOJIS = ["🍭", "🍬", "🌸", "💖", "🍓", "✨", "🎀", "💎"]
 
 def get_token():
     return os.environ.get("BOT_TOKEN", "").strip().strip('"').strip("'")
 
-# Bot API HTTP Caller jo Custom Green Buttons aur Big Blast Reactions trigger karta hai
+# Official Bot API Caller jo Button Colors (style) aur Big Blast Reactions trigger karta hai
 async def call_tg_bot_api(endpoint: str, payload: dict):
     token = get_token()
     if not token:
@@ -42,7 +35,7 @@ async def call_tg_bot_api(endpoint: str, payload: dict):
 
     return await asyncio.to_thread(_sync)
 
-# Ultra Clean & Aesthetic DM Caption (Exact text)
+# Ultra Clean & Aesthetic DM Caption (Exact text jo aapne diya)
 DM_START_TEXT = (
     "<blockquote>🌸 <b>𝑯𝒆𝒚 {mention}!! 𝑰'𝒎 𝒁𝒐𝒚𝒂</b> 💖\n"
     "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
@@ -144,7 +137,7 @@ def get_commands_menu():
 
 @Client.on_message(filters.command("start", prefixes=["/", "."]))
 async def start_handler(client: Client, message: Message):
-    # 1. User ke /start par Heart Big Animation Blast
+    # 1. User ke /start par Animated Reaction burst
     asyncio.create_task(
         call_tg_bot_api("setMessageReaction", {
             "chat_id": message.chat.id,
@@ -158,7 +151,6 @@ async def start_handler(client: Client, message: Message):
     first_name = message.from_user.first_name or "Friend"
     mention = f"<a href='tg://user?id={message.from_user.id}'>{first_name}</a>"
 
-    # Agar direct help argument ho
     if len(message.command) > 1 and message.command[1].lower() == "help":
         payload = {
             "chat_id": message.chat.id,
@@ -178,23 +170,23 @@ async def start_handler(client: Client, message: Message):
         return
 
     if message.chat.type.name == "PRIVATE":
-        # 2. Random Animated Sticker bhejna (jaise Aero bot bhejta hai)
-        sticker_to_send = random.choice(ANIMATED_STICKERS)
-        stk_resp = await call_tg_bot_api("sendSticker", {
+        # 2. Har baar alag Animated Emoji bhejna jo bada hokar pop karta hai
+        emoji_to_send = random.choice(ANIMATED_EMOJIS)
+        emoji_resp = await call_tg_bot_api("sendMessage", {
             "chat_id": message.chat.id,
-            "sticker": sticker_to_send
+            "text": emoji_to_send
         })
 
-        # Sticker dekhne ke liye ~1.4 sec pause
-        await asyncio.sleep(1.4)
+        # Emoji animation display hone ke liye short delay
+        await asyncio.sleep(1.3)
 
-        # 3. Sticker ko turant delete karna
-        if stk_resp and stk_resp.get("ok"):
-            stk_id = stk_resp["result"]["message_id"]
+        # 3. Animated emoji message ko delete karna
+        if emoji_resp and emoji_resp.get("ok"):
+            emoji_msg_id = emoji_resp["result"]["message_id"]
             asyncio.create_task(
                 call_tg_bot_api("deleteMessage", {
                     "chat_id": message.chat.id,
-                    "message_id": stk_id
+                    "message_id": emoji_msg_id
                 })
             )
 
@@ -222,7 +214,7 @@ async def start_handler(client: Client, message: Message):
             }
             resp = await call_tg_bot_api("sendMessage", text_payload)
 
-        # 5. Bot ke photo par Big Flame (Aag) blast reaction
+        # 5. Bot ke message par Flame Reaction
         if resp and resp.get("ok"):
             bot_msg_id = resp["result"]["message_id"]
             await asyncio.sleep(0.3)
