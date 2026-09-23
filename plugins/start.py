@@ -153,6 +153,16 @@ async def start_handler(client: Client, message: Message):
     first_name = message.from_user.first_name or "Friend"
     mention = f"<a href='tg://user?id={message.from_user.id}'>{first_name}</a>"
 
+    # Agar start argument 'help' hai toh direct commands menu dikhayein
+    if len(message.command) > 1 and message.command[1].lower() == "help":
+        payload = {
+            "chat_id": message.chat.id,
+            "text": HELP_TEXT,
+            "parse_mode": "HTML",
+            "reply_markup": get_commands_menu()
+        }
+        return await call_tg_bot_api("sendMessage", payload)
+
     if message.chat.type.name == "PRIVATE":
         caption = DM_START_TEXT.format(mention=mention)
         markup = get_start_markup(bot.username)
@@ -169,6 +179,34 @@ async def start_handler(client: Client, message: Message):
         caption = GROUP_START_TEXT.format(mention=mention)
         markup = get_group_markup(bot.username)
 
+        payload = {
+            "chat_id": message.chat.id,
+            "text": caption,
+            "reply_to_message_id": message.id,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+            "reply_markup": markup
+        }
+        await call_tg_bot_api("sendMessage", payload)
+
+# /help Command Handler (Direct Commands Open Karega)
+@Client.on_message(filters.command("help", prefixes=["/", "."]))
+async def help_handler(client: Client, message: Message):
+    bot = await client.get_me()
+    first_name = message.from_user.first_name or "Friend"
+    mention = f"<a href='tg://user?id={message.from_user.id}'>{first_name}</a>"
+
+    if message.chat.type.name == "PRIVATE":
+        payload = {
+            "chat_id": message.chat.id,
+            "text": HELP_TEXT,
+            "parse_mode": "HTML",
+            "reply_markup": get_commands_menu()
+        }
+        await call_tg_bot_api("sendMessage", payload)
+    else:
+        caption = GROUP_START_TEXT.format(mention=mention)
+        markup = get_group_markup(bot.username)
         payload = {
             "chat_id": message.chat.id,
             "text": caption,
@@ -269,13 +307,15 @@ async def sub_commands_view(client: Client, query: CallbackQuery):
             "• <code>.slot</code> - Casino 777 jackpot spin 🎰"
         ),
         "extra": (
-            "✨ <b>Extra Features:</b>\n"
+            "✨ <b>Extra & Stickers:</b>\n"
             "✦ ━━━━━━━━━━━━━━━━━━ ✦\n"
             "💤 <b>AFK System:</b>\n"
             "• <code>.afk &lt;reason&gt;</code> - Offline status lagayein.\n"
             "• Return aane par automated <i>Welcome Back</i> notice aayega.\n\n"
-            "🎨 <b>Quotes (.q):</b>\n"
-            "• Message par reply karke <code>.q</code> bhejein clean quote ke liye."
+            "🎨 <b>Stickers & Quotes:</b>\n"
+            "• <code>.q</code> - Normal sticker quote banayein.\n"
+            "• <code>.qr</code> - Replied message preview ke sath quote sticker banayein.\n"
+            "• <code>.kang [emoji]</code> - Kisi bhi image/sticker par reply karke apna sticker pack banayein."
         )
     }
     
