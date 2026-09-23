@@ -279,8 +279,8 @@ async def start_wordseek(client: Client, message: Message):
     asyncio.create_task(auto_stop_timer(client, chat_id, duration_sec, secret))
     await message.reply(f"<blockquote>🎮 <b>Started new{size} wordseek!</b></blockquote>")
 
-# Catch every text message across groups & supergroups at highest priority (group=-1)
-@Client.on_message((filters.group | filters.supergroup) & filters.text & ~filters.bot, group=-1)
+# Valid group=0 handler for both groups and supergroups
+@Client.on_message((filters.group | filters.supergroup) & filters.text & ~filters.bot, group=0)
 async def wordseek_guess_checker(client: Client, message: Message):
     chat_id = message.chat.id
     if chat_id not in GAMES:
@@ -291,7 +291,7 @@ async def wordseek_guess_checker(client: Client, message: Message):
 
     guess = message.text.strip().upper()
 
-    # Commands ya lambe chat sentences ignore karein
+    # Commands ya multi-word texts ko ignore karein
     if guess.startswith(("/", ".", "!", "#")) or len(guess.split()) > 1:
         return
 
@@ -346,5 +346,7 @@ async def wordseek_guess_checker(client: Client, message: Message):
             f"<blockquote>⌛ <b>GAME OVER!</b> Max guesses reached.\n"
             f"🎯 <b>Correct word was:</b> <code>{secret}</code></blockquote>"
         )
-        await message.reply(board_text, quote=True)
-        
+        await message.reply(lose_text, quote=True)
+return
+
+await message.reply(board_text, quote=True)
